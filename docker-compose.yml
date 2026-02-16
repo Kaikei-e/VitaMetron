@@ -1,0 +1,56 @@
+services:
+  # ─── PostgreSQL 18 + TimescaleDB ───
+  postgres:
+    image: timescale/timescaledb:latest-pg18
+    container_name: vitametron-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: vitametron
+      POSTGRES_USER: vitametron
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vitametron"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── Redis ───
+  redis:
+    image: redis:7-alpine
+    container_name: vitametron-redis
+    restart: unless-stopped
+    command: >
+      sh -c 'redis-server --requirepass "$$(cat /run/secrets/redis_password)"'
+    secrets:
+      - redis_password
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  redis_password:
+    file: ./secrets/redis_password
+  fitbit_client_id:
+    file: ./secrets/fitbit_client_id
+  fitbit_client_secret:
+    file: ./secrets/fitbit_client_secret
+  encryption_key:
+    file: ./secrets/encryption_key
+
+volumes:
+  pgdata:
+  redisdata:
