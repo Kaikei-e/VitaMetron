@@ -1,0 +1,6 @@
+.git
+.gitignore
+*.md
+LICENSE
+docker-compose.yml
+**/*_test.go
