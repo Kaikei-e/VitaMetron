@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+LICENSE
+docker-compose.yml
+node_modules
+.svelte-kit
+build

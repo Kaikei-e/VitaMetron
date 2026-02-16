@@ -1,0 +1,8 @@
+.git
+.gitignore
+*.md
+LICENSE
+docker-compose.yml
+__pycache__
+*.pyc
+.venv
