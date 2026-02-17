@@ -1,8 +1,11 @@
 package fitbit
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"vitametron/api/domain/entity"
 )
@@ -64,11 +67,172 @@ func MapSleepStage(stage string) string {
 	}
 }
 
-// NewDailySummaryFromActivity creates a partial DailySummary from Fitbit activity data.
-func NewDailySummaryFromActivity(data map[string]any) *entity.DailySummary {
-	s := &entity.DailySummary{Provider: "fitbit"}
-	// This is a scaffold — actual JSON parsing will be implemented
-	// when the Fitbit adapter is fully built.
-	_ = data
+// mapActivityToSummary converts Fitbit activity response to a DailySummary entity.
+func mapActivityToSummary(resp *ActivityResponse, date time.Time) *entity.DailySummary {
+	s := &entity.DailySummary{
+		Date:             date,
+		Provider:         "fitbit",
+		Steps:            resp.Summary.Steps,
+		CaloriesTotal:    resp.Summary.CaloriesOut,
+		CaloriesBMR:      resp.Summary.CaloriesBMR,
+		Floors:           resp.Summary.Floors,
+		RestingHR:        resp.Summary.RestingHeartRate,
+		ActiveZoneMin:    resp.Summary.ActiveZoneMinutes,
+		MinutesSedentary: resp.Summary.SedentaryMinutes,
+		MinutesLightly:   resp.Summary.LightlyActiveMinutes,
+		MinutesFairly:    resp.Summary.FairlyActiveMinutes,
+		MinutesVery:      resp.Summary.VeryActiveMinutes,
+		SyncedAt:         time.Now(),
+	}
+
+	// Calculate calories active = total - BMR
+	if s.CaloriesTotal > s.CaloriesBMR {
+		s.CaloriesActive = s.CaloriesTotal - s.CaloriesBMR
+	}
+
+	// Distance — use "total" activity distance
+	for _, d := range resp.Summary.Distances {
+		if d.Activity == "total" {
+			s.DistanceKM = float32(d.Distance)
+			break
+		}
+	}
+
+	// Heart rate zones
+	for _, zone := range resp.Summary.HeartRateZones {
+		switch strings.ToLower(zone.Name) {
+		case "out of range":
+			s.HRZoneOutMin = zone.Minutes
+		case "fat burn":
+			s.HRZoneFatMin = zone.Minutes
+		case "cardio":
+			s.HRZoneCardioMin = zone.Minutes
+		case "peak":
+			s.HRZonePeakMin = zone.Minutes
+		}
+	}
+
 	return s
+}
+
+// mapSleepStages extracts sleep stage data from the main sleep record.
+func mapSleepStages(resp *SleepResponse, date time.Time) []entity.SleepStage {
+	var stages []entity.SleepStage
+
+	for _, sleep := range resp.Sleep {
+		if !sleep.IsMainSleep {
+			continue
+		}
+
+		for _, d := range sleep.Levels.Data {
+			t, err := time.Parse("2006-01-02T15:04:05.000", d.DateTime)
+			if err != nil {
+				t = date // fallback
+			}
+			stages = append(stages, entity.SleepStage{
+				Time:    t,
+				Stage:   MapSleepStage(d.Level),
+				Seconds: d.Seconds,
+				LogID:   sleep.LogID,
+			})
+		}
+		break // only main sleep
+	}
+
+	return stages
+}
+
+// mapSleepRecord extracts a SleepRecord from the main sleep entry.
+func mapSleepRecord(resp *SleepResponse) *entity.SleepRecord {
+	for _, sleep := range resp.Sleep {
+		if !sleep.IsMainSleep {
+			continue
+		}
+
+		startTime, _ := time.Parse("2006-01-02T15:04:05.000", sleep.StartTime)
+		endTime, _ := time.Parse("2006-01-02T15:04:05.000", sleep.EndTime)
+
+		rec := &entity.SleepRecord{
+			LogID:         sleep.LogID,
+			StartTime:     startTime,
+			EndTime:       endTime,
+			DurationMin:   int(sleep.Duration / 60000),
+			MinutesAsleep: sleep.MinutesAsleep,
+			MinutesAwake:  sleep.MinutesAwake,
+			Type:          MapSleepType(sleep.Type),
+			IsMainSleep:   true,
+		}
+
+		if sleep.Levels.Summary.Deep != nil {
+			rec.DeepMin = sleep.Levels.Summary.Deep.Minutes
+		}
+		if sleep.Levels.Summary.Light != nil {
+			rec.LightMin = sleep.Levels.Summary.Light.Minutes
+		}
+		if sleep.Levels.Summary.REM != nil {
+			rec.REMMin = sleep.Levels.Summary.REM.Minutes
+		}
+		if sleep.Levels.Summary.Wake != nil {
+			rec.WakeMin = sleep.Levels.Summary.Wake.Minutes
+		}
+
+		return rec
+	}
+	return nil
+}
+
+// mapHRIntraday converts HR intraday data to HeartRateSample entities.
+func mapHRIntraday(resp *HRIntradayResponse, date time.Time) []entity.HeartRateSample {
+	dateStr := date.Format("2006-01-02")
+	samples := make([]entity.HeartRateSample, 0, len(resp.ActivitiesHeartIntraday.Dataset))
+
+	for _, d := range resp.ActivitiesHeartIntraday.Dataset {
+		t, err := time.Parse("2006-01-02 15:04:05", dateStr+" "+d.Time)
+		if err != nil {
+			continue
+		}
+		samples = append(samples, entity.HeartRateSample{
+			Time: t,
+			BPM:  d.Value,
+		})
+	}
+
+	return samples
+}
+
+// mapExerciseLogs converts activity entries to ExerciseLog entities.
+func mapExerciseLogs(resp *ActivityResponse, date time.Time) []entity.ExerciseLog {
+	dateStr := date.Format("2006-01-02")
+	logs := make([]entity.ExerciseLog, 0, len(resp.Activities))
+
+	for _, a := range resp.Activities {
+		startedAt, err := time.Parse("2006-01-02T15:04", dateStr+"T"+a.StartTime)
+		if err != nil {
+			startedAt, err = time.Parse("2006-01-02T15:04:05.000+00:00", a.StartTime)
+			if err != nil {
+				startedAt = date
+			}
+		}
+
+		log := entity.ExerciseLog{
+			ExternalID:   fmt.Sprintf("%d", a.LogID),
+			ActivityName: a.ActivityName,
+			StartedAt:    startedAt,
+			DurationMS:   a.Duration,
+			Calories:     a.Calories,
+			AvgHR:        a.AverageHeartRate,
+			DistanceKM:   float32(a.Distance),
+			SyncedAt:     time.Now(),
+		}
+
+		if a.ActiveZoneMinutes != nil {
+			if zoneJSON, err := json.Marshal(a.ActiveZoneMinutes); err == nil {
+				log.ZoneMinutes = zoneJSON
+			}
+		}
+
+		logs = append(logs, log)
+	}
+
+	return logs
 }
