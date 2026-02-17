@@ -58,3 +58,23 @@ func (r *SleepStageRepo) ListByDate(ctx context.Context, date time.Time) ([]enti
 	}
 	return stages, rows.Err()
 }
+
+func (r *SleepStageRepo) ListByTimeRange(ctx context.Context, from, to time.Time) ([]entity.SleepStage, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT time, stage, seconds, log_id FROM sleep_stages
+		 WHERE time >= $1 AND time < $2 ORDER BY time`, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var stages []entity.SleepStage
+	for rows.Next() {
+		var s entity.SleepStage
+		if err := rows.Scan(&s.Time, &s.Stage, &s.Seconds, &s.LogID); err != nil {
+			return nil, err
+		}
+		stages = append(stages, s)
+	}
+	return stages, rows.Err()
+}
