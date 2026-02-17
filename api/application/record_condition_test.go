@@ -48,25 +48,151 @@ func TestRecordCondition_Create_ValidationError(t *testing.T) {
 	}
 }
 
-func TestRecordCondition_List(t *testing.T) {
-	now := time.Now()
-	expected := []entity.ConditionLog{
-		{ID: 1, Overall: 3, LoggedAt: now},
-		{ID: 2, Overall: 5, LoggedAt: now},
-	}
+func TestRecordCondition_Create_RepoError(t *testing.T) {
 	repo := &mocks.MockConditionRepository{
-		ListFunc: func(_ context.Context, _, _ time.Time) ([]entity.ConditionLog, error) {
+		CreateFunc: func(_ context.Context, _ *entity.ConditionLog) error {
+			return errors.New("db error")
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
+	if err := uc.Create(context.Background(), log); err == nil {
+		t.Error("Create() expected error from repo, got nil")
+	}
+}
+
+func TestRecordCondition_GetByID_Success(t *testing.T) {
+	expected := &entity.ConditionLog{ID: 1, Overall: 3, LoggedAt: time.Now()}
+	repo := &mocks.MockConditionRepository{
+		GetByIDFunc: func(_ context.Context, id int64) (*entity.ConditionLog, error) {
+			if id != 1 {
+				t.Errorf("GetByID() id = %d, want 1", id)
+			}
 			return expected, nil
 		},
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	results, err := uc.List(context.Background(), now.Add(-24*time.Hour), now)
+	result, err := uc.GetByID(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("GetByID() error = %v", err)
+	}
+	if result.ID != expected.ID {
+		t.Errorf("GetByID() ID = %d, want %d", result.ID, expected.ID)
+	}
+}
+
+func TestRecordCondition_GetByID_NotFound(t *testing.T) {
+	repo := &mocks.MockConditionRepository{
+		GetByIDFunc: func(_ context.Context, _ int64) (*entity.ConditionLog, error) {
+			return nil, nil
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	_, err := uc.GetByID(context.Background(), 999)
+	if !errors.Is(err, entity.ErrNotFound) {
+		t.Errorf("GetByID() error = %v, want ErrNotFound", err)
+	}
+}
+
+func TestRecordCondition_List(t *testing.T) {
+	now := time.Now()
+	expected := &entity.ConditionListResult{
+		Items: []entity.ConditionLog{
+			{ID: 1, Overall: 3, LoggedAt: now},
+			{ID: 2, Overall: 5, LoggedAt: now},
+		},
+		Total: 2,
+	}
+	repo := &mocks.MockConditionRepository{
+		ListFunc: func(_ context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error) {
+			if filter.Limit != 20 {
+				t.Errorf("List() default limit = %d, want 20", filter.Limit)
+			}
+			return expected, nil
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	result, err := uc.List(context.Background(), entity.ConditionFilter{
+		From: now.Add(-24 * time.Hour),
+		To:   now,
+	})
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(results) != 2 {
-		t.Errorf("List() returned %d items, want 2", len(results))
+	if len(result.Items) != 2 {
+		t.Errorf("List() returned %d items, want 2", len(result.Items))
+	}
+}
+
+func TestRecordCondition_List_LimitCapped(t *testing.T) {
+	repo := &mocks.MockConditionRepository{
+		ListFunc: func(_ context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error) {
+			if filter.Limit != 100 {
+				t.Errorf("List() capped limit = %d, want 100", filter.Limit)
+			}
+			return &entity.ConditionListResult{}, nil
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	_, err := uc.List(context.Background(), entity.ConditionFilter{Limit: 500})
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+}
+
+func TestRecordCondition_Update_Success(t *testing.T) {
+	existing := &entity.ConditionLog{ID: 1, Overall: 3, LoggedAt: time.Now()}
+	var updated bool
+	repo := &mocks.MockConditionRepository{
+		GetByIDFunc: func(_ context.Context, _ int64) (*entity.ConditionLog, error) {
+			return existing, nil
+		},
+		UpdateFunc: func(_ context.Context, log *entity.ConditionLog) error {
+			updated = true
+			if log.ID != 1 {
+				t.Errorf("Update() ID = %d, want 1", log.ID)
+			}
+			return nil
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	log := &entity.ConditionLog{Overall: 4, LoggedAt: time.Now()}
+	if err := uc.Update(context.Background(), 1, log); err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if !updated {
+		t.Error("repo.Update was not called")
+	}
+}
+
+func TestRecordCondition_Update_ValidationError(t *testing.T) {
+	repo := &mocks.MockConditionRepository{}
+	uc := NewRecordConditionUseCase(repo)
+
+	log := &entity.ConditionLog{Overall: 0} // invalid
+	if err := uc.Update(context.Background(), 1, log); err == nil {
+		t.Error("Update() expected validation error, got nil")
+	}
+}
+
+func TestRecordCondition_Update_NotFound(t *testing.T) {
+	repo := &mocks.MockConditionRepository{
+		GetByIDFunc: func(_ context.Context, _ int64) (*entity.ConditionLog, error) {
+			return nil, nil
+		},
+	}
+	uc := NewRecordConditionUseCase(repo)
+
+	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
+	err := uc.Update(context.Background(), 999, log)
+	if !errors.Is(err, entity.ErrNotFound) {
+		t.Errorf("Update() error = %v, want ErrNotFound", err)
 	}
 }
 
@@ -88,8 +214,11 @@ func TestRecordCondition_Delete(t *testing.T) {
 
 func TestRecordCondition_GetTags(t *testing.T) {
 	repo := &mocks.MockConditionRepository{
-		GetTagsFunc: func(_ context.Context) ([]string, error) {
-			return []string{"headache", "tired"}, nil
+		GetTagsFunc: func(_ context.Context) ([]entity.TagCount, error) {
+			return []entity.TagCount{
+				{Tag: "headache", Count: 5},
+				{Tag: "tired", Count: 3},
+			}, nil
 		},
 	}
 	uc := NewRecordConditionUseCase(repo)
@@ -101,18 +230,31 @@ func TestRecordCondition_GetTags(t *testing.T) {
 	if len(tags) != 2 {
 		t.Errorf("GetTags() returned %d tags, want 2", len(tags))
 	}
+	if tags[0].Count != 5 {
+		t.Errorf("GetTags()[0].Count = %d, want 5", tags[0].Count)
+	}
 }
 
-func TestRecordCondition_Create_RepoError(t *testing.T) {
+func TestRecordCondition_GetSummary(t *testing.T) {
+	now := time.Now()
+	expected := &entity.ConditionSummary{
+		TotalCount: 10,
+		OverallAvg: 3.5,
+		OverallMin: 1,
+		OverallMax: 5,
+	}
 	repo := &mocks.MockConditionRepository{
-		CreateFunc: func(_ context.Context, _ *entity.ConditionLog) error {
-			return errors.New("db error")
+		GetSummaryFunc: func(_ context.Context, _, _ time.Time) (*entity.ConditionSummary, error) {
+			return expected, nil
 		},
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
-	if err := uc.Create(context.Background(), log); err == nil {
-		t.Error("Create() expected error from repo, got nil")
+	result, err := uc.GetSummary(context.Background(), now.Add(-7*24*time.Hour), now)
+	if err != nil {
+		t.Fatalf("GetSummary() error = %v", err)
+	}
+	if result.TotalCount != 10 {
+		t.Errorf("GetSummary() TotalCount = %d, want 10", result.TotalCount)
 	}
 }

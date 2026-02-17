@@ -12,18 +12,27 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"vitametron/api/adapter/fitbit"
 	"vitametron/api/adapter/mlclient"
 	"vitametron/api/adapter/postgres"
 	"vitametron/api/application"
 	"vitametron/api/handler"
 	"vitametron/api/infrastructure/cache"
 	"vitametron/api/infrastructure/config"
+	"vitametron/api/infrastructure/crypto"
 	"vitametron/api/infrastructure/database"
+	"vitametron/api/infrastructure/scheduler"
 	"vitametron/api/infrastructure/server"
 )
 
 func main() {
 	cfg := config.Load()
+
+	// Run migrations before opening the connection pool
+	if err := database.RunMigrations(cfg.DB.DSN()); err != nil {
+		log.Fatalf("failed to run migrations: %v", err)
+	}
+	log.Println("database migrations applied")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -39,26 +48,57 @@ func main() {
 	rdb := cache.NewRedis(cfg.Redis)
 	defer rdb.Close()
 
+	// Crypto
+	enc, err := crypto.NewEncryptor(cfg.Fitbit.EncryptionKey)
+	if err != nil {
+		log.Fatalf("failed to init encryptor: %v", err)
+	}
+
 	// Adapters
 	conditionRepo := postgres.NewConditionRepo(pool)
 	summaryRepo := postgres.NewDailySummaryRepo(pool)
 	hrRepo := postgres.NewHeartRateRepo(pool)
 	sleepRepo := postgres.NewSleepStageRepo(pool)
 	exerciseRepo := postgres.NewExerciseRepo(pool)
+	tokenRepo := postgres.NewTokenRepo(pool)
+	qualityRepo := postgres.NewDataQualityRepo(pool)
+	vriRepo := postgres.NewVRIRepo(pool)
 	mlClient := mlclient.New(cfg.ML.URL)
+
+	// Fitbit OAuth + Client
+	fitbitOAuth := fitbit.NewFitbitOAuth(cfg.Fitbit, rdb, tokenRepo, enc)
+	fitbitClient := fitbit.NewFitbitClient(fitbitOAuth)
 
 	// Use cases
 	conditionUC := application.NewRecordConditionUseCase(conditionRepo)
 	insightsUC := application.NewGetInsightsUseCase(mlClient)
-	// Note: SyncUseCase requires a BiometricsProvider (e.g., Fitbit adapter) not yet wired
-	_ = hrRepo
-	_ = sleepRepo
-	_ = exerciseRepo
+	syncUC := application.NewSyncBiometricsUseCase(fitbitClient, summaryRepo, hrRepo, sleepRepo, exerciseRepo, qualityRepo)
 
 	// Handlers
 	conditionHandler := handler.NewConditionHandler(conditionUC)
 	insightsHandler := handler.NewInsightsHandler(insightsUC)
-	biometricsHandler := handler.NewBiometricsHandler(summaryRepo)
+	biometricsHandler := handler.NewBiometricsHandler(summaryRepo, hrRepo, sleepRepo, qualityRepo)
+	oauthHandler := handler.NewOAuthHandler(fitbitOAuth, syncUC)
+	syncHandler := handler.NewSyncHandler(syncUC)
+	importUC := application.NewImportHealthConnectUseCase(summaryRepo, hrRepo, sleepRepo, exerciseRepo)
+	importHandler := handler.NewImportHandler(importUC)
+	anomalyRepo := postgres.NewAnomalyRepo(pool)
+	divergenceRepo := postgres.NewDivergenceRepo(pool)
+	vriHandler := handler.NewVRIHandler(mlClient, vriRepo)
+	anomalyHandler := handler.NewAnomalyHandler(mlClient, anomalyRepo)
+	divergenceHandler := handler.NewDivergenceHandler(mlClient, divergenceRepo)
+	hrvHandler := handler.NewHRVHandler(mlClient)
+	weeklyInsightsHandler := handler.NewWeeklyInsightsHandler(mlClient)
+	healthkitHandler := handler.NewHealthKitHandler(rdb, cfg.Preprocessor.URL, cfg.Preprocessor.UploadDir)
+
+	// Scheduler
+	interval := cfg.Sync.IntervalMin
+	if interval < 5 {
+		interval = 5
+	}
+	sched := scheduler.New(syncUC, fitbitOAuth, time.Duration(interval)*time.Minute)
+	sched.Start()
+	log.Printf("sync scheduler started: every %d minutes", interval)
 
 	// Server
 	srv := server.New()
@@ -71,6 +111,15 @@ func main() {
 	conditionHandler.Register(api)
 	insightsHandler.Register(api)
 	biometricsHandler.Register(api)
+	oauthHandler.Register(api)
+	syncHandler.Register(api)
+	importHandler.Register(api)
+	vriHandler.Register(api)
+	anomalyHandler.Register(api)
+	divergenceHandler.Register(api)
+	hrvHandler.Register(api)
+	weeklyInsightsHandler.Register(api)
+	healthkitHandler.Register(api)
 
 	// Graceful shutdown
 	go func() {
@@ -82,6 +131,9 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
+
+	sched.Stop()
+	log.Println("sync scheduler stopped")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()

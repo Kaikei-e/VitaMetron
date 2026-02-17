@@ -9,9 +9,12 @@ import (
 
 type ConditionUseCase interface {
 	Create(ctx context.Context, log *entity.ConditionLog) error
-	List(ctx context.Context, from, to time.Time) ([]entity.ConditionLog, error)
+	GetByID(ctx context.Context, id int64) (*entity.ConditionLog, error)
+	List(ctx context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error)
+	Update(ctx context.Context, id int64, log *entity.ConditionLog) error
 	Delete(ctx context.Context, id int64) error
-	GetTags(ctx context.Context) ([]string, error)
+	GetTags(ctx context.Context) ([]entity.TagCount, error)
+	GetSummary(ctx context.Context, from, to time.Time) (*entity.ConditionSummary, error)
 }
 
 type SyncUseCase interface {

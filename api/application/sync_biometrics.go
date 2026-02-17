@@ -5,15 +5,17 @@ import (
 	"log"
 	"time"
 
+	"vitametron/api/domain/entity"
 	"vitametron/api/domain/port"
 )
 
 type SyncBiometricsUseCase struct {
-	provider   port.BiometricsProvider
-	summaryRepo port.DailySummaryRepository
-	hrRepo     port.HeartRateRepository
-	sleepRepo  port.SleepStageRepository
+	provider     port.BiometricsProvider
+	summaryRepo  port.DailySummaryRepository
+	hrRepo       port.HeartRateRepository
+	sleepRepo    port.SleepStageRepository
 	exerciseRepo port.ExerciseRepository
+	qualityRepo  port.DataQualityRepository
 }
 
 func NewSyncBiometricsUseCase(
@@ -22,6 +24,7 @@ func NewSyncBiometricsUseCase(
 	hrRepo port.HeartRateRepository,
 	sleepRepo port.SleepStageRepository,
 	exerciseRepo port.ExerciseRepository,
+	qualityRepo port.DataQualityRepository,
 ) *SyncBiometricsUseCase {
 	return &SyncBiometricsUseCase{
 		provider:     provider,
@@ -29,6 +32,7 @@ func NewSyncBiometricsUseCase(
 		hrRepo:       hrRepo,
 		sleepRepo:    sleepRepo,
 		exerciseRepo: exerciseRepo,
+		qualityRepo:  qualityRepo,
 	}
 }
 
@@ -70,21 +74,44 @@ func (uc *SyncBiometricsUseCase) SyncDate(ctx context.Context, date time.Time) e
 		log.Printf("warn: FetchSkinTemperature failed for %s: %v", date.Format("2006-01-02"), err)
 	}
 
-	// Upsert enriched summary
+	// Fetch sleep stages + summary (before upsert so summary includes sleep data)
+	var sleepStages []entity.SleepStage
+	if stages, rec, err := uc.provider.FetchSleepStages(ctx, date); err == nil {
+		sleepStages = stages
+		if rec != nil {
+			summary.SleepStart = &rec.StartTime
+			summary.SleepEnd = &rec.EndTime
+			summary.SleepDurationMin = rec.DurationMin
+			summary.SleepMinutesAsleep = rec.MinutesAsleep
+			summary.SleepMinutesAwake = rec.MinutesAwake
+			summary.SleepType = rec.Type
+			summary.SleepDeepMin = rec.DeepMin
+			summary.SleepLightMin = rec.LightMin
+			summary.SleepREMMin = rec.REMMin
+			summary.SleepWakeMin = rec.WakeMin
+			summary.SleepIsMain = rec.IsMainSleep
+		}
+	} else {
+		log.Printf("warn: FetchSleepStages failed for %s: %v", date.Format("2006-01-02"), err)
+	}
+
+	// Upsert enriched summary (now includes sleep)
 	if err := uc.summaryRepo.Upsert(ctx, summary); err != nil {
 		return err
 	}
 
 	// Fetch and store HR intraday
-	if hrSamples, err := uc.provider.FetchHeartRateIntraday(ctx, date); err == nil && len(hrSamples) > 0 {
+	var hrSamples []entity.HeartRateSample
+	if samples, err := uc.provider.FetchHeartRateIntraday(ctx, date); err == nil && len(samples) > 0 {
+		hrSamples = samples
 		if err := uc.hrRepo.BulkUpsert(ctx, hrSamples); err != nil {
 			log.Printf("warn: BulkUpsert HR failed for %s: %v", date.Format("2006-01-02"), err)
 		}
 	}
 
-	// Fetch and store sleep stages
-	if stages, err := uc.provider.FetchSleepStages(ctx, date); err == nil && len(stages) > 0 {
-		if err := uc.sleepRepo.BulkUpsert(ctx, stages); err != nil {
+	// Store granular sleep stages
+	if len(sleepStages) > 0 {
+		if err := uc.sleepRepo.BulkUpsert(ctx, sleepStages); err != nil {
 			log.Printf("warn: BulkUpsert sleep stages failed for %s: %v", date.Format("2006-01-02"), err)
 		}
 	}
@@ -98,5 +125,97 @@ func (uc *SyncBiometricsUseCase) SyncDate(ctx context.Context, date time.Time) e
 		}
 	}
 
+	// Compute and store data quality
+	if uc.qualityRepo != nil {
+		quality := uc.computeDataQuality(ctx, date, summary, hrSamples)
+		if err := uc.qualityRepo.Upsert(ctx, quality); err != nil {
+			log.Printf("warn: Upsert data quality failed for %s: %v", date.Format("2006-01-02"), err)
+		}
+	}
+
 	return nil
+}
+
+func (uc *SyncBiometricsUseCase) computeDataQuality(
+	ctx context.Context,
+	date time.Time,
+	summary *entity.DailySummary,
+	hrSamples []entity.HeartRateSample,
+) *entity.DataQuality {
+	// Plausibility
+	flags := entity.CheckPlausibility(summary)
+	plausibilityPass := true
+	for _, status := range flags {
+		if status != "pass" && status != "missing" {
+			plausibilityPass = false
+			break
+		}
+	}
+
+	// Completeness
+	present, missing, completenessPct := entity.CheckMetricCompleteness(summary)
+
+	// Wear time from HR sample count (each sample = 1 minute)
+	hrSampleCount := len(hrSamples)
+	wearTimeHours := float32(hrSampleCount) / 60.0
+
+	// Valid day: wear_time >= 10h AND plausibility_pass
+	isValidDay := wearTimeHours >= 10.0 && plausibilityPass
+
+	// Baseline maturity
+	baselineDays := 0
+	if uc.qualityRepo != nil {
+		if count, err := uc.qualityRepo.CountValidDays(ctx, date, 60); err == nil {
+			baselineDays = count
+		} else {
+			log.Printf("warn: CountValidDays failed for %s: %v", date.Format("2006-01-02"), err)
+		}
+	}
+	var baselineMaturity string
+	switch {
+	case baselineDays < 14:
+		baselineMaturity = "cold"
+	case baselineDays < 60:
+		baselineMaturity = "warming"
+	default:
+		baselineMaturity = "mature"
+	}
+
+	// Composite confidence score
+	wearNorm := wearTimeHours / 16.0
+	if wearNorm > 1.0 {
+		wearNorm = 1.0
+	}
+	baselineNorm := float32(baselineDays) / 60.0
+	if baselineNorm > 1.0 {
+		baselineNorm = 1.0
+	}
+	confidenceScore := 0.4*completenessPct + 0.3*wearNorm + 0.3*baselineNorm
+
+	var confidenceLevel string
+	switch {
+	case confidenceScore < 0.4:
+		confidenceLevel = "low"
+	case confidenceScore <= 0.7:
+		confidenceLevel = "medium"
+	default:
+		confidenceLevel = "high"
+	}
+
+	return &entity.DataQuality{
+		Date:              date,
+		WearTimeHours:     wearTimeHours,
+		HRSampleCount:     hrSampleCount,
+		CompletenessPct:   completenessPct,
+		MetricsPresent:    present,
+		MetricsMissing:    missing,
+		PlausibilityFlags: flags,
+		PlausibilityPass:  plausibilityPass,
+		IsValidDay:        isValidDay,
+		BaselineDays:      baselineDays,
+		BaselineMaturity:  baselineMaturity,
+		ConfidenceScore:   confidenceScore,
+		ConfidenceLevel:   confidenceLevel,
+		ComputedAt:        time.Now(),
+	}
 }
