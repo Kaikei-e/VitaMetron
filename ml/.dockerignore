@@ -6,3 +6,6 @@ docker-compose.yml
 __pycache__
 *.pyc
 .venv
+tests/
+model_store/
+.ruff_cache/
