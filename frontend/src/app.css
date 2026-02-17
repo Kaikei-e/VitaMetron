@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+@theme {
+	--color-condition-5: oklch(0.723 0.219 149.579);  /* green / Excellent */
+	--color-condition-4: oklch(0.696 0.17 184.714);    /* teal / Good */
+	--color-condition-3: oklch(0.795 0.184 86.047);    /* yellow / Neutral */
+	--color-condition-2: oklch(0.705 0.213 47.604);    /* orange / Low */
+	--color-condition-1: oklch(0.637 0.237 25.331);    /* red / Critical */
+	--spacing-sidebar: 240px;
+	--spacing-sidebar-collapsed: 64px;
+	--spacing-bottomnav: 72px;
+}
