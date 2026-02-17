@@ -20,6 +20,8 @@ RUN apk add --no-cache ca-certificates tzdata \
 
 COPY --from=builder /server /server
 
+RUN mkdir -p /data/uploads && chown appuser:appuser /data/uploads
+
 USER appuser
 
 EXPOSE 8080
