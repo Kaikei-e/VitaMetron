@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,12 +21,14 @@ func NewConditionHandler(uc application.ConditionUseCase) *ConditionHandler {
 }
 
 type createConditionRequest struct {
-	Overall  int    `json:"overall"`
-	Mental   *int   `json:"mental,omitempty"`
-	Physical *int   `json:"physical,omitempty"`
-	Energy   *int   `json:"energy,omitempty"`
-	Note     string `json:"note,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
+	Overall    int        `json:"overall"`
+	Mental     *int       `json:"mental,omitempty"`
+	Physical   *int       `json:"physical,omitempty"`
+	Energy     *int       `json:"energy,omitempty"`
+	OverallVAS *int       `json:"overall_vas,omitempty"`
+	Note       string     `json:"note,omitempty"`
+	Tags       []string   `json:"tags,omitempty"`
+	LoggedAt   *time.Time `json:"logged_at,omitempty"`
 }
 
 func (h *ConditionHandler) Create(c echo.Context) error {
@@ -34,14 +37,20 @@ func (h *ConditionHandler) Create(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 	}
 
+	loggedAt := time.Now()
+	if req.LoggedAt != nil {
+		loggedAt = *req.LoggedAt
+	}
+
 	log := &entity.ConditionLog{
-		Overall:  req.Overall,
-		Mental:   req.Mental,
-		Physical: req.Physical,
-		Energy:   req.Energy,
-		Note:     req.Note,
-		Tags:     req.Tags,
-		LoggedAt: time.Now(),
+		Overall:    req.Overall,
+		Mental:     req.Mental,
+		Physical:   req.Physical,
+		Energy:     req.Energy,
+		OverallVAS: req.OverallVAS,
+		Note:       req.Note,
+		Tags:       req.Tags,
+		LoggedAt:   loggedAt,
 	}
 
 	if err := h.uc.Create(c.Request().Context(), log); err != nil {
@@ -51,23 +60,98 @@ func (h *ConditionHandler) Create(c echo.Context) error {
 	return c.JSON(http.StatusCreated, log)
 }
 
+func (h *ConditionHandler) GetByID(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+
+	log, err := h.uc.GetByID(c.Request().Context(), id)
+	if err != nil {
+		return conditionError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, log)
+}
+
 func (h *ConditionHandler) List(c echo.Context) error {
 	from, _ := time.Parse("2006-01-02", c.QueryParam("from"))
-	to, _ := time.Parse("2006-01-02", c.QueryParam("to"))
+	to, toErr := time.Parse("2006-01-02", c.QueryParam("to"))
 
 	if from.IsZero() {
 		from = time.Now().AddDate(0, -1, 0)
 	}
 	if to.IsZero() {
 		to = time.Now()
+	} else if toErr == nil {
+		// date-only string → include entire day (end of day)
+		to = to.AddDate(0, 0, 1).Add(-time.Nanosecond)
 	}
 
-	logs, err := h.uc.List(c.Request().Context(), from, to)
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+
+	filter := entity.ConditionFilter{
+		From:      from,
+		To:        to,
+		Tag:       c.QueryParam("tag"),
+		Limit:     limit,
+		Offset:    offset,
+		SortField: c.QueryParam("sort"),
+		SortDir:   c.QueryParam("order"),
+	}
+
+	result, err := h.uc.List(c.Request().Context(), filter)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, logs)
+	return c.JSON(http.StatusOK, result)
+}
+
+type updateConditionRequest struct {
+	Overall    int        `json:"overall"`
+	Mental     *int       `json:"mental,omitempty"`
+	Physical   *int       `json:"physical,omitempty"`
+	Energy     *int       `json:"energy,omitempty"`
+	OverallVAS *int       `json:"overall_vas,omitempty"`
+	Note       string     `json:"note,omitempty"`
+	Tags       []string   `json:"tags,omitempty"`
+	LoggedAt   *time.Time `json:"logged_at,omitempty"`
+}
+
+func (h *ConditionHandler) Update(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+	}
+
+	var req updateConditionRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+	}
+
+	log := &entity.ConditionLog{
+		Overall:    req.Overall,
+		Mental:     req.Mental,
+		Physical:   req.Physical,
+		Energy:     req.Energy,
+		OverallVAS: req.OverallVAS,
+		Note:       req.Note,
+		Tags:       req.Tags,
+	}
+	if req.LoggedAt != nil {
+		log.LoggedAt = *req.LoggedAt
+	}
+
+	if err := h.uc.Update(c.Request().Context(), id, log); err != nil {
+		if errors.Is(err, entity.ErrNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "not found"})
+		}
+		return c.JSON(http.StatusUnprocessableEntity, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, log)
 }
 
 func (h *ConditionHandler) Delete(c echo.Context) error {
@@ -92,9 +176,41 @@ func (h *ConditionHandler) GetTags(c echo.Context) error {
 	return c.JSON(http.StatusOK, tags)
 }
 
+func (h *ConditionHandler) GetSummary(c echo.Context) error {
+	from, _ := time.Parse("2006-01-02", c.QueryParam("from"))
+	to, toErr := time.Parse("2006-01-02", c.QueryParam("to"))
+
+	if from.IsZero() {
+		from = time.Now().AddDate(0, -1, 0)
+	}
+	if to.IsZero() {
+		to = time.Now()
+	} else if toErr == nil {
+		// date-only string → include entire day (end of day)
+		to = to.AddDate(0, 0, 1).Add(-time.Nanosecond)
+	}
+
+	summary, err := h.uc.GetSummary(c.Request().Context(), from, to)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, summary)
+}
+
 func (h *ConditionHandler) Register(g *echo.Group) {
 	g.POST("/conditions", h.Create)
 	g.GET("/conditions", h.List)
-	g.DELETE("/conditions/:id", h.Delete)
 	g.GET("/conditions/tags", h.GetTags)
+	g.GET("/conditions/summary", h.GetSummary)
+	g.GET("/conditions/:id", h.GetByID)
+	g.PUT("/conditions/:id", h.Update)
+	g.DELETE("/conditions/:id", h.Delete)
+}
+
+func conditionError(c echo.Context, err error) error {
+	if errors.Is(err, entity.ErrNotFound) {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "not found"})
+	}
+	return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 }

@@ -7,11 +7,13 @@ import (
 )
 
 type Config struct {
-	DB     DBConfig
-	Redis  RedisConfig
-	Fitbit FitbitConfig
-	Server ServerConfig
-	ML     MLConfig
+	DB           DBConfig
+	Redis        RedisConfig
+	Fitbit       FitbitConfig
+	Server       ServerConfig
+	ML           MLConfig
+	Sync         SyncConfig
+	Preprocessor PreprocessorConfig
 }
 
 type DBConfig struct {
@@ -40,9 +42,10 @@ type RedisConfig struct {
 }
 
 type FitbitConfig struct {
-	ClientID     string
-	ClientSecret string
-	RedirectURI  string
+	ClientID      string
+	ClientSecret  string
+	RedirectURI   string
+	EncryptionKey string
 }
 
 type ServerConfig struct {
@@ -51,6 +54,15 @@ type ServerConfig struct {
 
 type MLConfig struct {
 	URL string
+}
+
+type SyncConfig struct {
+	IntervalMin int
+}
+
+type PreprocessorConfig struct {
+	URL       string
+	UploadDir string
 }
 
 // Load reads configuration from environment variables and secrets.
@@ -70,15 +82,23 @@ func Load() *Config {
 			Password: ReadSecret("redis_password"),
 		},
 		Fitbit: FitbitConfig{
-			ClientID:     ReadSecret("fitbit_client_id"),
-			ClientSecret: ReadSecret("fitbit_client_secret"),
-			RedirectURI:  envOrDefault("FITBIT_REDIRECT_URI", ""),
+			ClientID:      ReadSecret("fitbit_client_id"),
+			ClientSecret:  ReadSecret("fitbit_client_secret"),
+			RedirectURI:   ReadSecret("fitbit_redirect_url"),
+			EncryptionKey: ReadSecret("encryption_key"),
 		},
 		Server: ServerConfig{
 			Port: envIntOrDefault("SERVER_PORT", 8080),
 		},
 		ML: MLConfig{
 			URL: envOrDefault("ML_SERVICE_URL", "http://ml:8000"),
+		},
+		Sync: SyncConfig{
+			IntervalMin: envIntOrDefault("SYNC_INTERVAL_MIN", 10),
+		},
+		Preprocessor: PreprocessorConfig{
+			URL:       envOrDefault("PREPROCESSOR_URL", "http://preprocessor:8100"),
+			UploadDir: envOrDefault("UPLOAD_DIR", "/data/uploads"),
 		},
 	}
 }
