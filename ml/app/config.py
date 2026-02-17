@@ -1,10 +1,50 @@
-import os
+from functools import lru_cache
 from pathlib import Path
 
+from pydantic import computed_field, model_validator
+from pydantic_settings import BaseSettings
 
-def read_secret(name: str, fallback: str = "") -> str:
-    """Docker Secret をファイルから読み取る。存在しない場合は環境変数にフォールバック。"""
-    secret_path = Path(f"/run/secrets/{name}")
-    if secret_path.exists():
-        return secret_path.read_text().strip()
-    return os.environ.get(name.upper(), fallback)
+SECRETS_DIR = Path("/run/secrets")
+
+
+def _read_secret(name: str) -> str | None:
+    """Read a Docker Secret file, returning None if unavailable."""
+    path = SECRETS_DIR / name
+    try:
+        return path.read_text().strip()
+    except (FileNotFoundError, PermissionError):
+        return None
+
+
+class Settings(BaseSettings):
+    model_config = {"env_prefix": ""}
+
+    db_host: str = "postgres"
+    db_port: int = 5432
+    db_name: str = "vitametron"
+    db_user: str = "vitametron"
+    db_password: str = ""
+    db_sslmode: str = "disable"
+    model_store_path: str = "/app/model_store"
+    log_level: str = "INFO"
+
+    @model_validator(mode="after")
+    def _load_secrets(self):
+        if not self.db_password:
+            secret = _read_secret("db_password")
+            if secret:
+                self.db_password = secret
+        return self
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql://{self.db_user}:{self.db_password}"
+            f"@{self.db_host}:{self.db_port}/{self.db_name}"
+        )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
