@@ -6,7 +6,7 @@
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![SvelteKit 2](https://img.shields.io/badge/SvelteKit-2-FF3E00?logo=svelte&logoColor=white)](https://svelte.dev/)
 [![Docker Compose](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![License: TBD](https://img.shields.io/badge/License-TBD-grey)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 > **Disclaimer:** VitaMetron is a personal project for general wellness and informational purposes only. It is **not** a medical device and does not diagnose, treat, or prevent any disease or condition. Always consult a healthcare professional for medical decisions.
 
@@ -405,7 +405,7 @@ VitaMetron operates within the scope of the FDA's [General Wellness Policy](http
 
 ## License
 
-[TBD]
+[MIT](LICENSE)
 
 ---
 
