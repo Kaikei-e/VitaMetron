@@ -39,6 +39,68 @@ services:
       timeout: 3s
       retries: 5
 
+  # ─── ML Service (FastAPI) ───
+  ml:
+    build:
+      context: ./ml
+      dockerfile: Dockerfile
+    container_name: vitametron-ml
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: vitametron
+      DB_USER: vitametron
+      DB_SSLMODE: disable
+      MODEL_STORE_PATH: /app/model_store
+      LOG_LEVEL: INFO
+    secrets:
+      - db_password
+    volumes:
+      - ml_models:/app/model_store
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ─── Preprocessor (Python FastAPI) ───
+  preprocessor:
+    build:
+      context: ./preprocessor
+      dockerfile: Dockerfile
+    container_name: vitametron-preprocessor
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: vitametron
+      DB_USER: vitametron
+      DB_SSLMODE: disable
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LOG_LEVEL: INFO
+    secrets:
+      - db_password
+      - redis_password
+    volumes:
+      - upload_data:/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   # ─── Go API (Echo) ───
   api:
     build:
@@ -55,17 +117,23 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       ML_SERVICE_URL: http://ml:8000
+      PREPROCESSOR_URL: http://preprocessor:8100
       SERVER_PORT: "8080"
     secrets:
       - db_password
       - redis_password
       - fitbit_client_id
       - fitbit_client_secret
+      - fitbit_redirect_url
       - encryption_key
+    volumes:
+      - upload_data:/data/uploads
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      ml:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
@@ -73,6 +141,31 @@ services:
       timeout: 5s
       retries: 3
       start_period: 5s
+
+  # ─── SvelteKit Frontend ───
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: vitametron-frontend
+    restart: unless-stopped
+    environment:
+      PROTOCOL_HEADER: X-Forwarded-Proto
+      HOST_HEADER: X-Forwarded-Host
+      ADDRESS_HEADER: X-Forwarded-For
+      XFF_DEPTH: "2"
+      PORT: "3000"
+      ORIGIN: ${ORIGIN:-https://vitametron.your-domain.com}
+      INTERNAL_API_URL: http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://0.0.0.0:3000/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
 
   # ─── Nginx Reverse Proxy ───
   nginx:
@@ -85,6 +178,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       api:
+        condition: service_healthy
+      frontend:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/nginx-health"]
@@ -101,9 +196,13 @@ secrets:
     file: ./secrets/fitbit_client_id
   fitbit_client_secret:
     file: ./secrets/fitbit_client_secret
+  fitbit_redirect_url:
+    file: ./secrets/fitbit_redirect_url
   encryption_key:
     file: ./secrets/encryption_key
 
 volumes:
   pgdata:
   redisdata:
+  ml_models:
+  upload_data:
