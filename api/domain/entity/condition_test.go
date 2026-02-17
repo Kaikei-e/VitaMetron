@@ -32,6 +32,21 @@ func TestConditionLog_Validate_OK(t *testing.T) {
 }
 
 func TestConditionLog_Validate_Error(t *testing.T) {
+	longNote := make([]byte, 1001)
+	for i := range longNote {
+		longNote[i] = 'a'
+	}
+
+	manyTags := make([]string, 11)
+	for i := range manyTags {
+		manyTags[i] = "tag"
+	}
+
+	longTag := make([]byte, 51)
+	for i := range longTag {
+		longTag[i] = 'a'
+	}
+
 	tests := []struct {
 		name string
 		log  ConditionLog
@@ -41,6 +56,9 @@ func TestConditionLog_Validate_Error(t *testing.T) {
 		{"mental out of range", ConditionLog{Overall: 3, Mental: intPtr(0)}},
 		{"physical out of range", ConditionLog{Overall: 3, Physical: intPtr(6)}},
 		{"energy out of range", ConditionLog{Overall: 3, Energy: intPtr(-1)}},
+		{"note too long", ConditionLog{Overall: 3, Note: string(longNote)}},
+		{"too many tags", ConditionLog{Overall: 3, Tags: manyTags}},
+		{"tag too long", ConditionLog{Overall: 3, Tags: []string{string(longTag)}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
