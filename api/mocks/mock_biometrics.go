@@ -11,7 +11,7 @@ type MockBiometricsProvider struct {
 	ProviderNameFunc           func() string
 	FetchDailySummaryFunc      func(ctx context.Context, date time.Time) (*entity.DailySummary, error)
 	FetchHeartRateIntradayFunc func(ctx context.Context, date time.Time) ([]entity.HeartRateSample, error)
-	FetchSleepStagesFunc       func(ctx context.Context, date time.Time) ([]entity.SleepStage, error)
+	FetchSleepStagesFunc       func(ctx context.Context, date time.Time) ([]entity.SleepStage, *entity.SleepRecord, error)
 	FetchExerciseLogsFunc      func(ctx context.Context, date time.Time) ([]entity.ExerciseLog, error)
 	FetchHRVFunc               func(ctx context.Context, date time.Time) (float32, float32, error)
 	FetchSpO2Func              func(ctx context.Context, date time.Time) (float32, float32, float32, error)
@@ -31,7 +31,7 @@ func (m *MockBiometricsProvider) FetchHeartRateIntraday(ctx context.Context, dat
 	return m.FetchHeartRateIntradayFunc(ctx, date)
 }
 
-func (m *MockBiometricsProvider) FetchSleepStages(ctx context.Context, date time.Time) ([]entity.SleepStage, error) {
+func (m *MockBiometricsProvider) FetchSleepStages(ctx context.Context, date time.Time) ([]entity.SleepStage, *entity.SleepRecord, error) {
 	return m.FetchSleepStagesFunc(ctx, date)
 }
 

@@ -8,26 +8,41 @@ import (
 )
 
 type MockConditionRepository struct {
-	CreateFunc  func(ctx context.Context, log *entity.ConditionLog) error
-	ListFunc    func(ctx context.Context, from, to time.Time) ([]entity.ConditionLog, error)
-	DeleteFunc  func(ctx context.Context, id int64) error
-	GetTagsFunc func(ctx context.Context) ([]string, error)
+	CreateFunc     func(ctx context.Context, log *entity.ConditionLog) error
+	GetByIDFunc    func(ctx context.Context, id int64) (*entity.ConditionLog, error)
+	ListFunc       func(ctx context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error)
+	UpdateFunc     func(ctx context.Context, log *entity.ConditionLog) error
+	DeleteFunc     func(ctx context.Context, id int64) error
+	GetTagsFunc    func(ctx context.Context) ([]entity.TagCount, error)
+	GetSummaryFunc func(ctx context.Context, from, to time.Time) (*entity.ConditionSummary, error)
 }
 
 func (m *MockConditionRepository) Create(ctx context.Context, log *entity.ConditionLog) error {
 	return m.CreateFunc(ctx, log)
 }
 
-func (m *MockConditionRepository) List(ctx context.Context, from, to time.Time) ([]entity.ConditionLog, error) {
-	return m.ListFunc(ctx, from, to)
+func (m *MockConditionRepository) GetByID(ctx context.Context, id int64) (*entity.ConditionLog, error) {
+	return m.GetByIDFunc(ctx, id)
+}
+
+func (m *MockConditionRepository) List(ctx context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error) {
+	return m.ListFunc(ctx, filter)
+}
+
+func (m *MockConditionRepository) Update(ctx context.Context, log *entity.ConditionLog) error {
+	return m.UpdateFunc(ctx, log)
 }
 
 func (m *MockConditionRepository) Delete(ctx context.Context, id int64) error {
 	return m.DeleteFunc(ctx, id)
 }
 
-func (m *MockConditionRepository) GetTags(ctx context.Context) ([]string, error) {
+func (m *MockConditionRepository) GetTags(ctx context.Context) ([]entity.TagCount, error) {
 	return m.GetTagsFunc(ctx)
+}
+
+func (m *MockConditionRepository) GetSummary(ctx context.Context, from, to time.Time) (*entity.ConditionSummary, error) {
+	return m.GetSummaryFunc(ctx, from, to)
 }
 
 type MockDailySummaryRepository struct {
@@ -62,8 +77,9 @@ func (m *MockHeartRateRepository) ListRange(ctx context.Context, from, to time.T
 }
 
 type MockSleepStageRepository struct {
-	BulkUpsertFunc func(ctx context.Context, stages []entity.SleepStage) error
-	ListByDateFunc func(ctx context.Context, date time.Time) ([]entity.SleepStage, error)
+	BulkUpsertFunc      func(ctx context.Context, stages []entity.SleepStage) error
+	ListByDateFunc      func(ctx context.Context, date time.Time) ([]entity.SleepStage, error)
+	ListByTimeRangeFunc func(ctx context.Context, from, to time.Time) ([]entity.SleepStage, error)
 }
 
 func (m *MockSleepStageRepository) BulkUpsert(ctx context.Context, stages []entity.SleepStage) error {
@@ -72,6 +88,10 @@ func (m *MockSleepStageRepository) BulkUpsert(ctx context.Context, stages []enti
 
 func (m *MockSleepStageRepository) ListByDate(ctx context.Context, date time.Time) ([]entity.SleepStage, error) {
 	return m.ListByDateFunc(ctx, date)
+}
+
+func (m *MockSleepStageRepository) ListByTimeRange(ctx context.Context, from, to time.Time) ([]entity.SleepStage, error) {
+	return m.ListByTimeRangeFunc(ctx, from, to)
 }
 
 type MockExerciseRepository struct {
@@ -88,8 +108,9 @@ func (m *MockExerciseRepository) ListRange(ctx context.Context, from, to time.Ti
 }
 
 type MockTokenRepository struct {
-	GetFunc  func(ctx context.Context, provider string) ([]byte, []byte, time.Time, error)
-	SaveFunc func(ctx context.Context, provider string, accessToken, refreshToken []byte, expiresAt time.Time) error
+	GetFunc    func(ctx context.Context, provider string) ([]byte, []byte, time.Time, error)
+	SaveFunc   func(ctx context.Context, provider string, accessToken, refreshToken []byte, expiresAt time.Time) error
+	DeleteFunc func(ctx context.Context, provider string) error
 }
 
 func (m *MockTokenRepository) Get(ctx context.Context, provider string) ([]byte, []byte, time.Time, error) {
@@ -98,6 +119,10 @@ func (m *MockTokenRepository) Get(ctx context.Context, provider string) ([]byte,
 
 func (m *MockTokenRepository) Save(ctx context.Context, provider string, accessToken, refreshToken []byte, expiresAt time.Time) error {
 	return m.SaveFunc(ctx, provider, accessToken, refreshToken, expiresAt)
+}
+
+func (m *MockTokenRepository) Delete(ctx context.Context, provider string) error {
+	return m.DeleteFunc(ctx, provider)
 }
 
 type MockPredictionRepository struct {
@@ -111,4 +136,66 @@ func (m *MockPredictionRepository) Save(ctx context.Context, pred *entity.Condit
 
 func (m *MockPredictionRepository) GetByDate(ctx context.Context, date time.Time) (*entity.ConditionPrediction, error) {
 	return m.GetByDateFunc(ctx, date)
+}
+
+type MockDataQualityRepository struct {
+	UpsertFunc         func(ctx context.Context, q *entity.DataQuality) error
+	GetByDateFunc      func(ctx context.Context, date time.Time) (*entity.DataQuality, error)
+	ListRangeFunc      func(ctx context.Context, from, to time.Time) ([]entity.DataQuality, error)
+	CountValidDaysFunc func(ctx context.Context, before time.Time, windowDays int) (int, error)
+}
+
+func (m *MockDataQualityRepository) Upsert(ctx context.Context, q *entity.DataQuality) error {
+	return m.UpsertFunc(ctx, q)
+}
+
+func (m *MockDataQualityRepository) GetByDate(ctx context.Context, date time.Time) (*entity.DataQuality, error) {
+	return m.GetByDateFunc(ctx, date)
+}
+
+func (m *MockDataQualityRepository) ListRange(ctx context.Context, from, to time.Time) ([]entity.DataQuality, error) {
+	return m.ListRangeFunc(ctx, from, to)
+}
+
+func (m *MockDataQualityRepository) CountValidDays(ctx context.Context, before time.Time, windowDays int) (int, error) {
+	return m.CountValidDaysFunc(ctx, before, windowDays)
+}
+
+type MockAnomalyRepository struct {
+	GetByDateFunc func(ctx context.Context, date time.Time) (*entity.AnomalyDetection, error)
+	ListRangeFunc func(ctx context.Context, from, to time.Time) ([]entity.AnomalyDetection, error)
+}
+
+func (m *MockAnomalyRepository) GetByDate(ctx context.Context, date time.Time) (*entity.AnomalyDetection, error) {
+	return m.GetByDateFunc(ctx, date)
+}
+
+func (m *MockAnomalyRepository) ListRange(ctx context.Context, from, to time.Time) ([]entity.AnomalyDetection, error) {
+	return m.ListRangeFunc(ctx, from, to)
+}
+
+type MockDivergenceRepository struct {
+	GetByDateFunc func(ctx context.Context, date time.Time) (*entity.DivergenceDetection, error)
+	ListRangeFunc func(ctx context.Context, from, to time.Time) ([]entity.DivergenceDetection, error)
+}
+
+func (m *MockDivergenceRepository) GetByDate(ctx context.Context, date time.Time) (*entity.DivergenceDetection, error) {
+	return m.GetByDateFunc(ctx, date)
+}
+
+func (m *MockDivergenceRepository) ListRange(ctx context.Context, from, to time.Time) ([]entity.DivergenceDetection, error) {
+	return m.ListRangeFunc(ctx, from, to)
+}
+
+type MockVRIRepository struct {
+	GetByDateFunc func(ctx context.Context, date time.Time) (*entity.VRIScore, error)
+	ListRangeFunc func(ctx context.Context, from, to time.Time) ([]entity.VRIScore, error)
+}
+
+func (m *MockVRIRepository) GetByDate(ctx context.Context, date time.Time) (*entity.VRIScore, error) {
+	return m.GetByDateFunc(ctx, date)
+}
+
+func (m *MockVRIRepository) ListRange(ctx context.Context, from, to time.Time) ([]entity.VRIScore, error) {
+	return m.ListRangeFunc(ctx, from, to)
 }

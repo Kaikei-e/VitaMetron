@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -23,6 +24,12 @@ func New() *Server {
 
 	e.Use(middleware.Recover())
 	e.Use(middleware.Logger())
+	e.Use(middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{
+		Limit: "200M",
+		Skipper: func(c echo.Context) bool {
+			return strings.HasPrefix(c.Path(), "/api/import/healthkit")
+		},
+	}))
 
 	return &Server{Echo: e}
 }
