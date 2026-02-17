@@ -9,9 +9,12 @@ import (
 
 type ConditionRepository interface {
 	Create(ctx context.Context, log *entity.ConditionLog) error
-	List(ctx context.Context, from, to time.Time) ([]entity.ConditionLog, error)
+	GetByID(ctx context.Context, id int64) (*entity.ConditionLog, error)
+	List(ctx context.Context, filter entity.ConditionFilter) (*entity.ConditionListResult, error)
+	Update(ctx context.Context, log *entity.ConditionLog) error
 	Delete(ctx context.Context, id int64) error
-	GetTags(ctx context.Context) ([]string, error)
+	GetTags(ctx context.Context) ([]entity.TagCount, error)
+	GetSummary(ctx context.Context, from, to time.Time) (*entity.ConditionSummary, error)
 }
 
 type DailySummaryRepository interface {
@@ -28,6 +31,7 @@ type HeartRateRepository interface {
 type SleepStageRepository interface {
 	BulkUpsert(ctx context.Context, stages []entity.SleepStage) error
 	ListByDate(ctx context.Context, date time.Time) ([]entity.SleepStage, error)
+	ListByTimeRange(ctx context.Context, from, to time.Time) ([]entity.SleepStage, error)
 }
 
 type ExerciseRepository interface {
@@ -38,9 +42,32 @@ type ExerciseRepository interface {
 type TokenRepository interface {
 	Get(ctx context.Context, provider string) (accessToken, refreshToken []byte, expiresAt time.Time, err error)
 	Save(ctx context.Context, provider string, accessToken, refreshToken []byte, expiresAt time.Time) error
+	Delete(ctx context.Context, provider string) error
 }
 
 type PredictionRepository interface {
 	Save(ctx context.Context, pred *entity.ConditionPrediction) error
 	GetByDate(ctx context.Context, date time.Time) (*entity.ConditionPrediction, error)
+}
+
+type DataQualityRepository interface {
+	Upsert(ctx context.Context, q *entity.DataQuality) error
+	GetByDate(ctx context.Context, date time.Time) (*entity.DataQuality, error)
+	ListRange(ctx context.Context, from, to time.Time) ([]entity.DataQuality, error)
+	CountValidDays(ctx context.Context, before time.Time, windowDays int) (int, error)
+}
+
+type VRIRepository interface {
+	GetByDate(ctx context.Context, date time.Time) (*entity.VRIScore, error)
+	ListRange(ctx context.Context, from, to time.Time) ([]entity.VRIScore, error)
+}
+
+type AnomalyRepository interface {
+	GetByDate(ctx context.Context, date time.Time) (*entity.AnomalyDetection, error)
+	ListRange(ctx context.Context, from, to time.Time) ([]entity.AnomalyDetection, error)
+}
+
+type DivergenceRepository interface {
+	GetByDate(ctx context.Context, date time.Time) (*entity.DivergenceDetection, error)
+	ListRange(ctx context.Context, from, to time.Time) ([]entity.DivergenceDetection, error)
 }
