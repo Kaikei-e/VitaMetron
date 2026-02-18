@@ -16,6 +16,7 @@ dependencies = [
     "xgboost>=2.1",
     "optuna>=4.1",
     "torch>=2.5",
+    "httpx>=0.28",
 ]
 
 [dependency-groups]
