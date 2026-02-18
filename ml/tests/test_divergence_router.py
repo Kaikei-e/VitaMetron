@@ -13,12 +13,13 @@ from tests.conftest import MockPool
 
 @pytest.fixture
 def trained_detector():
-    """Create a trained detector with synthetic data."""
+    """Create a trained detector with synthetic VAS-scale data."""
     with tempfile.TemporaryDirectory() as d:
         detector = DivergenceDetector(d)
         rng = np.random.RandomState(42)
         X = rng.randn(50, 5)
-        y = 3.0 + 0.5 * X[:, 0] - 0.3 * X[:, 1] + 0.2 * rng.randn(50)
+        y = 50.0 + 10.0 * X[:, 0] - 6.0 * X[:, 1] + 4.0 * rng.randn(50)
+        y = np.clip(y, 1.0, 99.0)
         detector.train(X, y, ["feat_a", "feat_b", "feat_c", "feat_d", "feat_e"])
         yield detector
 
@@ -67,9 +68,9 @@ async def test_detect_returns_cached(client, test_app_with_detector, mock_pool):
     cached_row = {
         "date": "2026-01-15",
         "condition_log_id": 1,
-        "actual_score": 3.5,
-        "predicted_score": 3.0,
-        "residual": 0.5,
+        "actual_score": 65.0,
+        "predicted_score": 60.0,
+        "residual": 5.0,
         "cusum_positive": 1.2,
         "cusum_negative": 0.0,
         "cusum_alert": False,
@@ -92,7 +93,7 @@ async def test_detect_returns_cached(client, test_app_with_detector, mock_pool):
     assert resp.status_code == 200
     data = resp.json()
     assert data["divergence_type"] == "aligned"
-    assert data["actual_score"] == 3.5
+    assert data["actual_score"] == 65.0
     assert len(data["top_drivers"]) == 1
 
 

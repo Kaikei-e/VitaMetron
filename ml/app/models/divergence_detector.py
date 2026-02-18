@@ -25,6 +25,7 @@ class DivergenceDetector:
     MIN_PAIRS_FULL = 60      # fully calibrated
     CUSUM_THRESHOLD = 4.0    # h parameter (standard deviations)
     CUSUM_ALLOWANCE = 0.5    # k parameter (slack)
+    LOGIT_EPS = 0.5          # boundary padding for logit transform
 
     def __init__(self, model_store_path: str):
         self._store = Path(model_store_path) / "divergence"
@@ -39,6 +40,7 @@ class DivergenceDetector:
         self._rmse: float | None = None
         self._training_pairs: int = 0
         self._model_version: str = ""
+        self._use_logit: bool = False
 
     @property
     def is_ready(self) -> bool:
@@ -83,24 +85,41 @@ class DivergenceDetector:
             return "baseline"
         return "full"
 
+    @staticmethod
+    def _logit(y: np.ndarray, eps: float = 0.5) -> np.ndarray:
+        """Transform VAS [0,100] to logit space (-inf, +inf)."""
+        y_unit = np.clip(y, eps, 100.0 - eps) / 100.0
+        return np.log(y_unit / (1.0 - y_unit))
+
+    @staticmethod
+    def _inverse_logit(y_logit: np.ndarray) -> np.ndarray:
+        """Transform logit space back to VAS [0,100]."""
+        y_unit = 1.0 / (1.0 + np.exp(-y_logit))
+        return y_unit * 100.0
+
     def train(
         self,
         X: np.ndarray,
         y: np.ndarray,
         feature_names: list[str],
+        sample_weights: np.ndarray | None = None,
+        use_logit: bool = True,
     ) -> dict:
         """Train StandardScaler + Ridge regression.
 
         Args:
             X: Feature matrix (n_samples, n_features). May contain NaN.
-            y: Target condition scores.
+            y: Target condition scores (VAS 0-100).
             feature_names: Ordered feature names.
+            sample_weights: Optional per-sample weights for Ridge.fit().
+            use_logit: If True, apply logit transform to target before fitting.
 
         Returns:
             Training metadata dict.
         """
         self._feature_names = feature_names
         self._training_pairs = int(X.shape[0])
+        self._use_logit = use_logit
 
         # Compute and store medians for NaN imputation
         self._feature_medians = np.nanmedian(X, axis=0)
@@ -116,12 +135,24 @@ class DivergenceDetector:
         self._scaler = StandardScaler()
         X_scaled = self._scaler.fit_transform(X_imputed)
 
+        # Logit transform target for bounded [0,100] regression
+        if self._use_logit:
+            y_train = self._logit(y, self.LOGIT_EPS)
+        else:
+            y_train = y
+
         # Fit Ridge regression
         self._model = Ridge(alpha=1.0)
-        self._model.fit(X_scaled, y)
+        self._model.fit(X_scaled, y_train, sample_weight=sample_weights)
 
-        # Compute training residuals for CuSum baseline
-        y_pred = self._model.predict(X_scaled)
+        # Compute predictions in original VAS scale for metrics and CuSum
+        y_pred_raw = self._model.predict(X_scaled)
+        if self._use_logit:
+            y_pred = np.clip(self._inverse_logit(y_pred_raw), 0.0, 100.0)
+        else:
+            y_pred = y_pred_raw
+
+        # Residuals in original scale (VAS 0-100)
         residuals = y - y_pred
 
         self._residual_mean = float(np.mean(residuals))
@@ -129,7 +160,7 @@ class DivergenceDetector:
         if self._residual_std < 1e-8:
             self._residual_std = 1.0
 
-        # Compute quality metrics
+        # Compute quality metrics in original scale
         ss_res = float(np.sum((y - y_pred) ** 2))
         ss_tot = float(np.sum((y - np.mean(y)) ** 2))
         self._r2_score = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
@@ -150,10 +181,11 @@ class DivergenceDetector:
         }
 
         logger.info(
-            "Trained divergence detector: %d pairs, R2=%.3f, MAE=%.3f",
+            "Trained divergence detector: %d pairs, R2=%.3f, MAE=%.3f, logit=%s",
             self._training_pairs,
             self._r2_score,
             self._mae,
+            self._use_logit,
         )
 
         return metadata
@@ -165,7 +197,7 @@ class DivergenceDetector:
             features: 1D array of feature values. May contain NaN.
 
         Returns:
-            (predicted_score, confidence)
+            (predicted_score, confidence) — predicted_score in [0, 100].
         """
         if self._model is None:
             raise RuntimeError("Model not trained or loaded")
@@ -178,7 +210,16 @@ class DivergenceDetector:
                 nan_count += 1
 
         X_scaled = self._scaler.transform(features_imputed.reshape(1, -1))
-        predicted = float(self._model.predict(X_scaled)[0])
+        predicted_raw = float(self._model.predict(X_scaled)[0])
+
+        # Inverse-logit to map back to VAS [0, 100]
+        if self._use_logit:
+            predicted = float(self._inverse_logit(np.array([predicted_raw]))[0])
+        else:
+            predicted = predicted_raw
+
+        # Safety clamp to [0, 100]
+        predicted = float(np.clip(predicted, 0.0, 100.0))
 
         # Compute confidence
         feature_completeness = 1.0 - (nan_count / len(features)) if len(features) > 0 else 0.0
@@ -274,6 +315,7 @@ class DivergenceDetector:
                 "r2_score": self._r2_score,
                 "mae": self._mae,
                 "rmse": self._rmse,
+                "use_logit": self._use_logit,
             },
             self._store / "params.joblib",
         )
@@ -309,6 +351,7 @@ class DivergenceDetector:
             self._r2_score = params["r2_score"]
             self._mae = params["mae"]
             self._rmse = params.get("rmse")
+            self._use_logit = params.get("use_logit", False)
 
             config = json.loads(config_path.read_text())
             self._model_version = config["model_version"]

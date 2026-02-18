@@ -10,7 +10,7 @@ from app.models.divergence_detector import DivergenceDetector
 from app.models.ensemble_hrv import HRVEnsemble
 from app.models.hrv_predictor import HRVPredictor
 from app.models.lstm_predictor import LSTMHRVPredictor
-from app.routers import anomaly, divergence, health, hrv_predict, insights, predict, risk, vri
+from app.routers import advice, anomaly, divergence, health, hrv_predict, insights, predict, risk, vri
 
 
 @asynccontextmanager
@@ -24,6 +24,7 @@ async def lifespan(app: FastAPI):
     logger = logging.getLogger(__name__)
 
     logger.info("Starting ML service...")
+    app.state.settings = settings
     app.state.db_pool = await create_pool(settings)
 
     # Load anomaly detector
@@ -85,3 +86,4 @@ app.include_router(vri.router)
 app.include_router(anomaly.router)
 app.include_router(hrv_predict.router)
 app.include_router(divergence.router)
+app.include_router(advice.router)

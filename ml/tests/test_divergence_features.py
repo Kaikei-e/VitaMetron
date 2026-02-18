@@ -89,7 +89,7 @@ async def test_extract_training_pairs(mock_pool):
         {
             "date": datetime.date(2026, 1, 10),
             "condition_log_id": 1,
-            "target_score": 3.5,
+            "target_score": 65.0,
             "resting_hr": 62.0,
             "hrv_ln_rmssd": 3.5,
             "sleep_duration_min": 420.0,
@@ -104,7 +104,7 @@ async def test_extract_training_pairs(mock_pool):
         {
             "date": datetime.date(2026, 1, 11),
             "condition_log_id": 2,
-            "target_score": 4.0,
+            "target_score": 72.0,
             "resting_hr": 60.0,
             "hrv_ln_rmssd": 3.7,
             "sleep_duration_min": 450.0,
@@ -125,8 +125,8 @@ async def test_extract_training_pairs(mock_pool):
 
     assert X.shape == (2, len(DIVERGENCE_FEATURE_NAMES))
     assert len(y) == 2
-    assert y[0] == 3.5
-    assert y[1] == 4.0
+    assert y[0] == 65.0
+    assert y[1] == 72.0
     assert dates == [datetime.date(2026, 1, 10), datetime.date(2026, 1, 11)]
     assert log_ids == [1, 2]
     assert feature_names == DIVERGENCE_FEATURE_NAMES

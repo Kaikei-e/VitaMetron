@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     db_sslmode: str = "disable"
     model_store_path: str = "/app/model_store"
     log_level: str = "INFO"
+    ollama_base_url: str = "http://ollama:11434"
+    ollama_model: str = "gemma3:4b-it-qat"
+    ollama_timeout: float = 120.0
 
     @model_validator(mode="after")
     def _load_secrets(self):

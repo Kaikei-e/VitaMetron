@@ -21,13 +21,14 @@ def feature_names():
 
 @pytest.fixture
 def training_data(feature_names):
-    """Generate synthetic paired (biometric, condition) data."""
+    """Generate synthetic paired (biometric, condition) data on VAS 0-100 scale."""
     rng = np.random.RandomState(42)
     n = 50
     n_features = len(feature_names)
     X = rng.randn(n, n_features)
-    # Target: linear combination + noise (simulates condition scores)
-    y = 3.0 + 0.5 * X[:, 0] - 0.3 * X[:, 1] + 0.2 * rng.randn(n)
+    # Target: VAS scale 0-100 with linear combination + noise
+    y = 50.0 + 10.0 * X[:, 0] - 6.0 * X[:, 1] + 4.0 * rng.randn(n)
+    y = np.clip(y, 1.0, 99.0)
     return X, y
 
 
@@ -62,11 +63,11 @@ def test_compute_residual(model_dir, training_data, feature_names):
     detector = DivergenceDetector(model_dir)
     detector.train(X, y, feature_names)
 
-    residual = detector.compute_residual(4.0, 3.0)
-    assert residual == 1.0
+    residual = detector.compute_residual(70.0, 60.0)
+    assert residual == 10.0
 
-    residual = detector.compute_residual(2.0, 3.0)
-    assert residual == -1.0
+    residual = detector.compute_residual(40.0, 60.0)
+    assert residual == -20.0
 
 
 def test_cusum_aligned(model_dir, training_data, feature_names):
@@ -213,7 +214,8 @@ def test_train_with_nan_features(model_dir, feature_names):
     """Training data with NaN should be handled via median imputation."""
     rng = np.random.RandomState(42)
     X = rng.randn(30, 5)
-    y = 3.0 + 0.5 * X[:, 0] + 0.1 * rng.randn(30)
+    y = 50.0 + 10.0 * X[:, 0] + 2.0 * rng.randn(30)
+    y = np.clip(y, 1.0, 99.0)
     # Inject NaN
     X[0, 0] = float("nan")
     X[5, 2] = float("nan")
@@ -222,3 +224,87 @@ def test_train_with_nan_features(model_dir, feature_names):
     metadata = detector.train(X, y, feature_names)
     assert detector.is_ready
     assert metadata["training_pairs"] == 30
+
+
+def test_train_with_logit_transform(model_dir, training_data, feature_names):
+    """Logit transform should produce predictions within [0, 100]."""
+    X, y = training_data
+    detector = DivergenceDetector(model_dir)
+    metadata = detector.train(X, y, feature_names, use_logit=True)
+
+    assert detector.is_ready
+    assert metadata["r2_score"] is not None
+    assert metadata["mae"] is not None
+
+    # Predict on several points — all should be in [0, 100]
+    for i in range(min(10, X.shape[0])):
+        predicted, confidence = detector.predict(X[i])
+        assert 0.0 <= predicted <= 100.0, f"Predicted {predicted} out of [0,100]"
+        assert 0.0 <= confidence <= 1.0
+
+
+def test_train_without_logit_transform(model_dir, training_data, feature_names):
+    """Without logit transform, model should still train normally."""
+    X, y = training_data
+    detector = DivergenceDetector(model_dir)
+    metadata = detector.train(X, y, feature_names, use_logit=False)
+
+    assert detector.is_ready
+    assert metadata["training_pairs"] == 50
+
+
+def test_train_with_sample_weights(model_dir, training_data, feature_names):
+    """Training with sample weights should succeed."""
+    X, y = training_data
+    weights = np.ones(X.shape[0])
+    weights[:10] = 0.2  # downweight first 10 samples
+
+    detector = DivergenceDetector(model_dir)
+    metadata = detector.train(X, y, feature_names, sample_weights=weights)
+
+    assert detector.is_ready
+    assert metadata["training_pairs"] == 50
+
+    # Predictions should still be bounded
+    point = np.zeros(5)
+    predicted, _ = detector.predict(point)
+    assert 0.0 <= predicted <= 100.0
+
+
+def test_predictions_bounded(model_dir, feature_names):
+    """Predictions should always be in [0, 100] even with extreme inputs."""
+    rng = np.random.RandomState(42)
+    X = rng.randn(50, 5)
+    y = 50.0 + 10.0 * X[:, 0] - 6.0 * X[:, 1] + 4.0 * rng.randn(50)
+    y = np.clip(y, 1.0, 99.0)
+
+    detector = DivergenceDetector(model_dir)
+    detector.train(X, y, feature_names, use_logit=True)
+
+    # Test with extreme feature values
+    extreme_high = np.full(5, 10.0)
+    predicted, _ = detector.predict(extreme_high)
+    assert 0.0 <= predicted <= 100.0
+
+    extreme_low = np.full(5, -10.0)
+    predicted, _ = detector.predict(extreme_low)
+    assert 0.0 <= predicted <= 100.0
+
+
+def test_save_and_load_preserves_logit(model_dir, training_data, feature_names):
+    """Save/load should preserve use_logit flag."""
+    X, y = training_data
+    detector = DivergenceDetector(model_dir)
+    detector.train(X, y, feature_names, use_logit=True)
+    detector.save()
+
+    # Load into new instance
+    detector2 = DivergenceDetector(model_dir)
+    assert detector2.load()
+    assert detector2._use_logit is True
+
+    # Predictions should match
+    point = np.zeros(5)
+    pred1, _ = detector.predict(point)
+    pred2, _ = detector2.predict(point)
+    assert abs(pred1 - pred2) < 1e-6

@@ -41,6 +41,7 @@ TRAINING_PAIRS_QUERY = """
 SELECT
     ds.date,
     cl.id AS condition_log_id,
+    (cl.mood_vas IS NULL) AS is_legacy,
     cl.overall_vas::float AS target_score,
     ds.resting_hr,
     CASE WHEN ds.hrv_daily_rmssd > 0 THEN ln(ds.hrv_daily_rmssd) ELSE NULL END AS hrv_ln_rmssd,

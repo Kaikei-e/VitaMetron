@@ -8,6 +8,12 @@ import numpy as np
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
+LEGACY_DATES = {
+    datetime.date(2026, 2, 15),
+    datetime.date(2026, 2, 16),
+    datetime.date(2026, 2, 17),
+}
+
 from app.features.divergence_features import (
     DIVERGENCE_FEATURE_NAMES,
     count_paired_observations,
@@ -349,6 +355,13 @@ async def train_divergence_model(request: Request):
         pool, start_date, end_date
     )
 
+    # Exclude legacy backfill dates (old 1-5 scale auto-converted)
+    mask = np.array([d not in LEGACY_DATES for d in dates], dtype=bool)
+    n_excluded = int(np.sum(~mask))
+    X, y = X[mask], y[mask]
+    dates = [d for d, m in zip(dates, mask) if m]
+    log_ids = [lid for lid, m in zip(log_ids, mask) if m]
+
     if X.shape[0] < detector.MIN_PAIRS_INITIAL:
         return JSONResponse(
             status_code=400,
@@ -362,8 +375,13 @@ async def train_divergence_model(request: Request):
             },
         )
 
-    # Train
-    metadata = detector.train(X, y, feature_names)
+    logger.info(
+        "Training divergence: %d pairs (%d legacy excluded)",
+        X.shape[0], n_excluded,
+    )
+
+    # Train with logit transform
+    metadata = detector.train(X, y, feature_names, use_logit=True)
 
     # Save model artifacts
     detector.save()
@@ -380,7 +398,12 @@ async def train_divergence_model(request: Request):
             metadata["residual_mean"],
             metadata["residual_std"],
             metadata["feature_names"],
-            json.dumps({"alpha": 1.0}),
+            json.dumps({
+                "alpha": 1.0,
+                "logit_transform": True,
+                "legacy_excluded_dates": sorted(str(d) for d in LEGACY_DATES),
+                "n_excluded": n_excluded,
+            }),
         )
 
     return DivergenceTrainResponse(
