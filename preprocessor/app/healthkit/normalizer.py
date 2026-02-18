@@ -4,10 +4,24 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from app.healthkit.parser import RawSample
+from app.healthkit.plausibility import (
+    AVG_HR_MAX,
+    AVG_HR_MIN,
+    CALORIES_TOTAL_MAX,
+    DISTANCE_KM_MAX,
+    RESTING_HR_MAX,
+    RESTING_HR_MIN,
+    RMSSD_MAX,
+    RMSSD_MIN,
+    SKIN_TEMP_DELTA_MAX,
+    SKIN_TEMP_DELTA_MIN,
+    STEPS_MAX,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,50 +77,54 @@ def normalize_day(records: list[RawSample]) -> NormalizedDay:
     for r in records:
         by_type[r.type].append(r)
 
-    # Heart Rate: 1-min resampling with source dedup
-    result.hr_1min = _resample_hr(
-        by_type.get("HKQuantityTypeIdentifierHeartRate", [])
+    # Heart Rate: 1-min resampling with plausibility fallback
+    result.hr_1min = _resample_hr_plausible(
+        by_type.get("HKQuantityTypeIdentifierHeartRate", []),
+        lambda v: AVG_HR_MIN <= v <= AVG_HR_MAX,
     )
 
-    # Steps: daily sum with source dedup
-    result.steps = _sum_with_dedup(
-        by_type.get("HKQuantityTypeIdentifierStepCount", [])
+    # Steps: daily sum with plausibility fallback
+    result.steps = _sum_plausible(
+        by_type.get("HKQuantityTypeIdentifierStepCount", []),
+        lambda v: 0 < v <= STEPS_MAX,
     )
 
-    # Distance: daily sum
-    result.distance_km = _float_sum_with_dedup(
-        by_type.get("HKQuantityTypeIdentifierDistanceWalkingRunning", [])
+    # Distance: daily sum with plausibility fallback
+    result.distance_km = _float_sum_plausible(
+        by_type.get("HKQuantityTypeIdentifierDistanceWalkingRunning", []),
+        lambda v: 0 < v <= DISTANCE_KM_MAX,
     )
 
-    # Active Energy
-    result.calories_active = _sum_with_dedup(
-        by_type.get("HKQuantityTypeIdentifierActiveEnergyBurned", [])
+    # Active Energy with plausibility fallback
+    result.calories_active = _sum_plausible(
+        by_type.get("HKQuantityTypeIdentifierActiveEnergyBurned", []),
+        lambda v: 0 < v <= CALORIES_TOTAL_MAX,
     )
 
-    # Basal Energy
-    result.calories_bmr = _sum_with_dedup(
-        by_type.get("HKQuantityTypeIdentifierBasalEnergyBurned", [])
+    # Basal Energy with plausibility fallback
+    result.calories_bmr = _sum_plausible(
+        by_type.get("HKQuantityTypeIdentifierBasalEnergyBurned", []),
+        lambda v: 0 < v <= CALORIES_TOTAL_MAX,
     )
 
-    # Floors
-    result.floors = _sum_with_dedup(
-        by_type.get("HKQuantityTypeIdentifierFlightsClimbed", [])
+    # Floors (low anomaly risk — no plausibility check)
+    result.floors = _sum_plausible(
+        by_type.get("HKQuantityTypeIdentifierFlightsClimbed", []),
     )
 
-    # Resting HR: use dedicated type, take last value of the day
-    rhr_records = by_type.get("HKQuantityTypeIdentifierRestingHeartRate", [])
-    if rhr_records:
-        # Prefer Apple Watch source, take last reading
-        best = _best_source_records(rhr_records)
-        if best:
-            result.resting_hr = round(best[-1].numeric_value)
+    # Resting HR with plausibility fallback
+    rhr_val = _scalar_plausible(
+        by_type.get("HKQuantityTypeIdentifierRestingHeartRate", []),
+        lambda v: RESTING_HR_MIN <= v <= RESTING_HR_MAX,
+    )
+    if rhr_val is not None:
+        result.resting_hr = round(rhr_val)
 
-    # HRV SDNN: daily average
-    hrv_records = by_type.get("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", [])
-    if hrv_records:
-        best = _best_source_records(hrv_records)
-        if best:
-            result.hrv_rmssd = sum(r.numeric_value for r in best) / len(best)
+    # HRV SDNN: daily average with plausibility fallback
+    result.hrv_rmssd = _avg_plausible(
+        by_type.get("HKQuantityTypeIdentifierHeartRateVariabilitySDNN", []),
+        lambda v: RMSSD_MIN <= v <= RMSSD_MAX,
+    )
 
     # SpO2: keep all samples with timestamps (filtered by sleep later)
     spo2_records = by_type.get("HKQuantityTypeIdentifierOxygenSaturation", [])
@@ -128,21 +146,16 @@ def normalize_day(records: list[RawSample]) -> NormalizedDay:
         except ValueError:
             continue
 
-    # Skin Temperature
-    skin_records = by_type.get(
-        "HKQuantityTypeIdentifierAppleSleepingWristTemperature", []
+    # Skin Temperature with plausibility fallback
+    result.skin_temp = _scalar_plausible(
+        by_type.get("HKQuantityTypeIdentifierAppleSleepingWristTemperature", []),
+        lambda v: SKIN_TEMP_DELTA_MIN <= v <= SKIN_TEMP_DELTA_MAX,
     )
-    if skin_records:
-        best = _best_source_records(skin_records)
-        if best:
-            result.skin_temp = best[-1].numeric_value
 
-    # VO2Max: latest value of the day
-    vo2_records = by_type.get("HKQuantityTypeIdentifierVO2Max", [])
-    if vo2_records:
-        best = _best_source_records(vo2_records)
-        if best:
-            result.vo2_max = best[-1].numeric_value
+    # VO2Max (low anomaly risk — no plausibility check)
+    result.vo2_max = _scalar_plausible(
+        by_type.get("HKQuantityTypeIdentifierVO2Max", []),
+    )
 
     return result
 
@@ -165,17 +178,93 @@ def _best_source_records(records: list[RawSample]) -> list[RawSample]:
     return result
 
 
-def _resample_hr(records: list[RawSample]) -> list[MinuteBucket]:
-    """Resample heart rate records into 1-minute buckets using average."""
+def _source_groups_by_priority(records: list[RawSample]) -> list[list[RawSample]]:
+    """Group records by source priority, return groups ordered highest-first."""
     if not records:
         return []
+    by_priority: dict[int, list[RawSample]] = defaultdict(list)
+    for r in records:
+        p = _source_priority(r.source_name, r.device)
+        by_priority[p].append(r)
+    groups = []
+    for priority in sorted(by_priority.keys(), reverse=True):
+        group = sorted(by_priority[priority], key=lambda r: r.start)
+        groups.append(group)
+    return groups
 
-    # Source dedup: prefer Apple Watch
-    best = _best_source_records(records)
 
-    # Group by minute
+def _scalar_plausible(
+    records: list[RawSample],
+    is_plausible: Callable[[float], bool] | None = None,
+) -> float | None:
+    """Get last value from the best plausible source, with fallback."""
+    groups = _source_groups_by_priority(records)
+    if not groups:
+        return None
+    if len(groups) == 1 or is_plausible is None:
+        return groups[0][-1].numeric_value
+    for group in groups:
+        val = group[-1].numeric_value
+        if is_plausible(val):
+            return val
+    return groups[0][-1].numeric_value  # all implausible → best source
+
+
+def _avg_plausible(
+    records: list[RawSample],
+    is_plausible: Callable[[float], bool] | None = None,
+) -> float | None:
+    """Average from best plausible source, with fallback."""
+    groups = _source_groups_by_priority(records)
+    if not groups:
+        return None
+    if len(groups) == 1 or is_plausible is None:
+        return sum(r.numeric_value for r in groups[0]) / len(groups[0])
+    for group in groups:
+        avg = sum(r.numeric_value for r in group) / len(group)
+        if is_plausible(avg):
+            return avg
+    return sum(r.numeric_value for r in groups[0]) / len(groups[0])
+
+
+def _sum_plausible(
+    records: list[RawSample],
+    is_plausible: Callable[[float], bool] | None = None,
+) -> int:
+    """Sum from best plausible source, with fallback."""
+    groups = _source_groups_by_priority(records)
+    if not groups:
+        return 0
+    if len(groups) == 1 or is_plausible is None:
+        return round(sum(r.numeric_value for r in groups[0]))
+    for group in groups:
+        total = round(sum(r.numeric_value for r in group))
+        if is_plausible(total):
+            return total
+    return round(sum(r.numeric_value for r in groups[0]))
+
+
+def _float_sum_plausible(
+    records: list[RawSample],
+    is_plausible: Callable[[float], bool] | None = None,
+) -> float:
+    """Float sum from best plausible source, with fallback."""
+    groups = _source_groups_by_priority(records)
+    if not groups:
+        return 0.0
+    if len(groups) == 1 or is_plausible is None:
+        return sum(r.numeric_value for r in groups[0])
+    for group in groups:
+        total = sum(r.numeric_value for r in group)
+        if is_plausible(total):
+            return total
+    return sum(r.numeric_value for r in groups[0])
+
+
+def _resample_from_records(records: list[RawSample]) -> list[MinuteBucket]:
+    """Resample a list of HR records into 1-minute buckets."""
     minute_groups: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
-    for r in best:
+    for r in records:
         try:
             bpm = r.numeric_value
         except ValueError:
@@ -183,12 +272,10 @@ def _resample_hr(records: list[RawSample]) -> list[MinuteBucket]:
         minute_key = r.start.strftime("%Y-%m-%d %H:%M")
         minute_groups[minute_key].append((r.start, bpm))
 
-    # Average per minute
     buckets: list[MinuteBucket] = []
     for minute_key in sorted(minute_groups.keys()):
         samples = minute_groups[minute_key]
         avg_bpm = sum(v for _, v in samples) / len(samples)
-        # Use the first sample's timestamp, truncated to minute
         ts = samples[0][0].replace(second=0, microsecond=0)
         hhmm = ts.strftime("%H:%M")
         buckets.append(MinuteBucket(
@@ -196,8 +283,31 @@ def _resample_hr(records: list[RawSample]) -> list[MinuteBucket]:
             timestamp=ts,
             bpm=round(avg_bpm),
         ))
-
     return buckets
+
+
+def _resample_hr_plausible(
+    records: list[RawSample],
+    is_plausible: Callable[[float], bool] | None = None,
+) -> list[MinuteBucket]:
+    """Resample HR with plausibility-based source fallback."""
+    groups = _source_groups_by_priority(records)
+    if not groups:
+        return []
+    if len(groups) == 1 or is_plausible is None:
+        return _resample_from_records(groups[0])
+    for group in groups:
+        buckets = _resample_from_records(group)
+        if buckets:
+            avg_bpm = sum(b.bpm for b in buckets) / len(buckets)
+            if is_plausible(avg_bpm):
+                return buckets
+    return _resample_from_records(groups[0])
+
+
+def _resample_hr(records: list[RawSample]) -> list[MinuteBucket]:
+    """Resample heart rate records into 1-minute buckets using average."""
+    return _resample_hr_plausible(records)
 
 
 def _sum_with_dedup(records: list[RawSample]) -> int:
