@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
 	import HelpTooltip from '$lib/components/ui/HelpTooltip.svelte';
+	import { vasToLabel, vasToTextColor } from '$lib/utils/condition';
 	import type { WeeklyInsight } from '$lib/types/insights';
 
 	let { insight }: { insight: WeeklyInsight | null } = $props();
@@ -41,9 +42,10 @@
 		<div class="mt-3 flex items-baseline gap-4">
 			<div>
 				<span class="text-xs text-gray-500 dark:text-gray-400">Avg Score</span>
-				<p class="text-2xl font-bold">
-					{insight.AvgScore != null ? insight.AvgScore.toFixed(1) : '--'}
+				<p class="text-2xl font-bold {insight.AvgScore != null ? vasToTextColor(Math.round(insight.AvgScore)) : ''}">
+					{insight.AvgScore != null ? Math.round(insight.AvgScore) : '--'}
 				</p>
+				<span class="text-xs text-gray-500">{insight.AvgScore != null ? vasToLabel(Math.round(insight.AvgScore)) : ''}</span>
 			</div>
 			<div>
 				<span class="text-xs text-gray-500 dark:text-gray-400">Trend</span>

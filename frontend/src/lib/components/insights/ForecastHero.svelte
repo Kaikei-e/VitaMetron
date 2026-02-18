@@ -1,30 +1,15 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
 	import HelpTooltip from '$lib/components/ui/HelpTooltip.svelte';
+	import { vasToTextColor, vasToLabel } from '$lib/utils/condition';
 	import type { ConditionPrediction } from '$lib/types/insights';
 	import { humanizeFeature } from '$lib/utils/humanize';
 
 	let { prediction }: { prediction: ConditionPrediction | null } = $props();
 
-	const scoreLabels: Record<number, string> = {
-		1: 'Critical',
-		2: 'Low',
-		3: 'Neutral',
-		4: 'Good',
-		5: 'Excellent'
-	};
-
-	const colorMap: Record<number, string> = {
-		1: 'text-condition-1',
-		2: 'text-condition-2',
-		3: 'text-condition-3',
-		4: 'text-condition-4',
-		5: 'text-condition-5'
-	};
-
-	let rounded = $derived(prediction ? Math.round(prediction.PredictedScore) : null);
-	let scoreColor = $derived(rounded ? colorMap[rounded] ?? '' : '');
-	let label = $derived(rounded ? scoreLabels[rounded] ?? '' : '');
+	let vasScore = $derived(prediction ? Math.round(prediction.PredictedScore) : null);
+	let scoreColor = $derived(vasToTextColor(vasScore));
+	let label = $derived(vasToLabel(vasScore));
 	let confidencePct = $derived(prediction ? Math.round(prediction.Confidence * 100) : 0);
 	let isLowConfidence = $derived(confidencePct < 50);
 
@@ -40,11 +25,11 @@
 <Card>
 	<div class="flex items-center gap-1.5">
 		<h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Tomorrow's Forecast</h3>
-		<HelpTooltip text="MLモデルが明日のコンディションを1〜5で予測した値です。過去のバイオメトリクスとコンディション記録のパターンから算出します。Confidenceはモデルの確信度で、70%以上が信頼できる目安です。" />
+		<HelpTooltip text="MLモデルが明日のコンディションを0〜100で予測した値です。過去のバイオメトリクスとコンディション記録のパターンから算出します。Confidenceはモデルの確信度で、70%以上が信頼できる目安です。" />
 	</div>
-	{#if prediction}
+	{#if prediction && vasScore !== null}
 		<div class="mt-3 flex items-baseline gap-3" class:opacity-60={isLowConfidence}>
-			<span class="text-5xl font-bold {scoreColor}">{rounded}</span>
+			<span class="text-5xl font-bold {scoreColor}">{vasScore}</span>
 			<span class="text-lg font-medium text-gray-600 dark:text-gray-300">{label}</span>
 		</div>
 		{#if becauseText}
