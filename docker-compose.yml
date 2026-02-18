@@ -39,6 +39,29 @@ services:
       timeout: 3s
       retries: 5
 
+  # ─── Ollama (LLM Inference) ───
+  ollama:
+    image: ollama/ollama:latest
+    container_name: vitametron-ollama
+    restart: unless-stopped
+    environment:
+      OLLAMA_HOST: "0.0.0.0"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   # ─── ML Service (FastAPI) ───
   ml:
     build:
@@ -47,6 +70,7 @@ services:
     container_name: vitametron-ml
     restart: unless-stopped
     environment:
+      TZ: Asia/Tokyo
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: vitametron
@@ -54,12 +78,15 @@ services:
       DB_SSLMODE: disable
       MODEL_STORE_PATH: /app/model_store
       LOG_LEVEL: INFO
+      OLLAMA_BASE_URL: http://ollama:11434
     secrets:
       - db_password
     volumes:
       - ml_models:/app/model_store
     depends_on:
       postgres:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -76,6 +103,7 @@ services:
     container_name: vitametron-preprocessor
     restart: unless-stopped
     environment:
+      TZ: Asia/Tokyo
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: vitametron
@@ -109,6 +137,7 @@ services:
     container_name: vitametron-api
     restart: unless-stopped
     environment:
+      TZ: Asia/Tokyo
       DB_HOST: postgres
       DB_PORT: "5432"
       DB_NAME: vitametron
@@ -150,6 +179,7 @@ services:
     container_name: vitametron-frontend
     restart: unless-stopped
     environment:
+      TZ: Asia/Tokyo
       PROTOCOL_HEADER: X-Forwarded-Proto
       HOST_HEADER: X-Forwarded-Host
       ADDRESS_HEADER: X-Forwarded-For
@@ -206,3 +236,4 @@ volumes:
   redisdata:
   ml_models:
   upload_data:
+  ollama_data:

@@ -1,4 +1,4 @@
-.PHONY: up down build logs ps health init-secrets migrate-up migrate-down migrate-status migrate-create
+.PHONY: up down build logs ps health init-secrets migrate-up migrate-down migrate-status migrate-create ollama-pull
 
 # 起動
 up:
@@ -46,3 +46,7 @@ migrate-status:
 
 migrate-create:
 	goose -dir $(MIGRATIONS_DIR) -s create $(name) sql
+
+# Ollama モデルダウンロード
+ollama-pull:
+	docker exec vitametron-ollama ollama pull gemma3:4b-it-qat
