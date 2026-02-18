@@ -18,10 +18,20 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 }
 
 /** Fetch JSON with safe error handling — returns fallback on any failure */
-export async function fetchJSON<T>(path: string, fallback: T): Promise<T> {
+export async function fetchJSON<T>(path: string, fallback: T, timeoutMs = 10_000): Promise<T> {
 	try {
-		const res = await apiFetch(path);
-		return (await res.json()) as T;
+		const controller = new AbortController();
+		const timeout = setTimeout(() => controller.abort(), timeoutMs);
+		try {
+			const res = await fetch(`${env.INTERNAL_API_URL}${path}`, {
+				signal: controller.signal,
+				headers: { 'Content-Type': 'application/json' }
+			});
+			if (!res.ok) throw new Error(`API error: ${res.status}`);
+			return (await res.json()) as T;
+		} finally {
+			clearTimeout(timeout);
+		}
 	} catch {
 		return fallback;
 	}

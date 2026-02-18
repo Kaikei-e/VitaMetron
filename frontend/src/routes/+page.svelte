@@ -9,6 +9,7 @@
 	import SleepStageTimeline from '$lib/components/dashboard/SleepStageTimeline.svelte';
 	import VRICard from '$lib/components/dashboard/VRICard.svelte';
 	import VRITrendChart from '$lib/components/dashboard/VRITrendChart.svelte';
+	import DailyAdviceCard from '$lib/components/dashboard/DailyAdviceCard.svelte';
 	import { formatDateTime } from '$lib/utils/date';
 	import type { MetricComparison } from '$lib/types/biometrics';
 
@@ -115,6 +116,11 @@
 		<span class="font-semibold">Building baseline</span> — Need {14 - (data.dataQuality.BaselineDays ?? 0)} more valid days for reliable insights.
 	</div>
 {/if}
+
+<!-- Daily Advice -->
+<section class="mb-6">
+	<DailyAdviceCard advicePromise={data.todayAdvice} />
+</section>
 
 <!-- Header: always visible -->
 <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 mb-6">

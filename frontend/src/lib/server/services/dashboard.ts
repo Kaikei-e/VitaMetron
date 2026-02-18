@@ -8,6 +8,7 @@ import type {
 	DataQuality,
 	VRIScore
 } from '$lib/types/biometrics';
+import type { DailyAdvice } from '$lib/types/advice';
 
 export interface DashboardData {
 	latestCondition: ConditionLog | null;
@@ -25,6 +26,7 @@ export interface DashboardData {
 	monthSummaries: DailySummary[];
 	monthVRI: VRIScore[];
 	monthConditions: ConditionLog[];
+	todayAdvice: Promise<DailyAdvice | null>;
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
@@ -32,6 +34,9 @@ export async function loadDashboard(): Promise<DashboardData> {
 	const yesterday = daysAgoISO(1);
 	const sevenDaysAgo = daysAgoISO(7);
 	const thirtyDaysAgo = daysAgoISO(30);
+
+	// Start advice fetch early — don't await (LLM generation can be slow, 120s timeout)
+	const todayAdvice = fetchJSON<DailyAdvice | null>(`/api/advice?date=${today}`, null, 120_000);
 
 	const [
 		condRes,
@@ -91,6 +96,7 @@ export async function loadDashboard(): Promise<DashboardData> {
 		weekVRI,
 		monthSummaries,
 		monthVRI,
-		monthConditions: monthCondRes.items ?? []
+		monthConditions: monthCondRes.items ?? [],
+		todayAdvice
 	};
 }
