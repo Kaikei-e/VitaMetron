@@ -28,6 +28,21 @@ const featureNames: Record<string, string> = {
 	condition_energy: 'Energy Score'
 };
 
+/** VRI contributing_factors metric names → Japanese labels */
+const vriMetricNames: Record<string, string> = {
+	ln_rmssd: 'HRV',
+	resting_hr: '安静時心拍',
+	sleep_duration: '睡眠時間',
+	sri: '睡眠規則性',
+	spo2: 'SpO2',
+	deep_sleep: '深い睡眠',
+	br: '呼吸数'
+};
+
+export function humanizeVRIMetric(metric: string): string {
+	return vriMetricNames[metric] ?? metric;
+}
+
 export function humanizeFeature(feature: string): string {
 	return featureNames[feature] ?? feature.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
