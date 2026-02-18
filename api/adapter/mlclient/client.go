@@ -655,6 +655,81 @@ func (c *Client) TrainDivergenceModel(ctx context.Context) (*entity.DivergenceTr
 	}, nil
 }
 
+// --- Daily Advice ---
+
+type adviceResponse struct {
+	Date         string `json:"date"`
+	AdviceText   string `json:"advice_text"`
+	ModelName    string `json:"model_name"`
+	GenerationMs *int   `json:"generation_ms"`
+	Cached       bool   `json:"cached"`
+}
+
+func adviceResponseToEntity(ar adviceResponse, fallbackDate time.Time) *entity.DailyAdvice {
+	return &entity.DailyAdvice{
+		Date:         fallbackDate,
+		AdviceText:   ar.AdviceText,
+		ModelName:    ar.ModelName,
+		GenerationMs: ar.GenerationMs,
+		Cached:       ar.Cached,
+		GeneratedAt:  time.Now(),
+	}
+}
+
+func (c *Client) GetAdvice(ctx context.Context, date time.Time) (*entity.DailyAdvice, error) {
+	url := fmt.Sprintf("%s/advice?date=%s", c.baseURL, date.Format("2006-01-02"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// LLM generation can take up to 120s
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var ar adviceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ar); err != nil {
+		return nil, err
+	}
+
+	return adviceResponseToEntity(ar, date), nil
+}
+
+func (c *Client) RegenerateAdvice(ctx context.Context, date time.Time) (*entity.DailyAdvice, error) {
+	url := fmt.Sprintf("%s/advice/regenerate?date=%s", c.baseURL, date.Format("2006-01-02"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// LLM generation can take up to 120s
+	client := &http.Client{Timeout: 120 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var ar adviceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&ar); err != nil {
+		return nil, err
+	}
+
+	return adviceResponseToEntity(ar, date), nil
+}
+
 func (c *Client) DetectRisk(ctx context.Context, date time.Time) ([]string, error) {
 	url := fmt.Sprintf("%s/risk?date=%s", c.baseURL, date.Format("2006-01-02"))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

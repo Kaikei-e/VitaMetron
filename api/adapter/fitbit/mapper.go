@@ -10,6 +10,10 @@ import (
 	"vitametron/api/domain/entity"
 )
 
+// jst is the Asia/Tokyo timezone (UTC+9) used for parsing Fitbit timestamps.
+// Fitbit API returns times in the user's profile timezone (JST).
+var jst = time.FixedZone("JST", 9*60*60)
+
 // ParseVO2MaxRange parses a Fitbit VO2 Max string like "42.5-46.4" and returns the midpoint.
 func ParseVO2MaxRange(s string) *float64 {
 	s = strings.TrimSpace(s)
@@ -125,7 +129,7 @@ func mapSleepStages(resp *SleepResponse, date time.Time) []entity.SleepStage {
 		}
 
 		for _, d := range sleep.Levels.Data {
-			t, err := time.Parse("2006-01-02T15:04:05.000", d.DateTime)
+			t, err := time.ParseInLocation("2006-01-02T15:04:05.000", d.DateTime, jst)
 			if err != nil {
 				t = date // fallback
 			}
@@ -149,8 +153,8 @@ func mapSleepRecord(resp *SleepResponse) *entity.SleepRecord {
 			continue
 		}
 
-		startTime, _ := time.Parse("2006-01-02T15:04:05.000", sleep.StartTime)
-		endTime, _ := time.Parse("2006-01-02T15:04:05.000", sleep.EndTime)
+		startTime, _ := time.ParseInLocation("2006-01-02T15:04:05.000", sleep.StartTime, jst)
+		endTime, _ := time.ParseInLocation("2006-01-02T15:04:05.000", sleep.EndTime, jst)
 
 		rec := &entity.SleepRecord{
 			LogID:         sleep.LogID,
@@ -187,7 +191,7 @@ func mapHRIntraday(resp *HRIntradayResponse, date time.Time) []entity.HeartRateS
 	samples := make([]entity.HeartRateSample, 0, len(resp.ActivitiesHeartIntraday.Dataset))
 
 	for _, d := range resp.ActivitiesHeartIntraday.Dataset {
-		t, err := time.Parse("2006-01-02 15:04:05", dateStr+" "+d.Time)
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", dateStr+" "+d.Time, jst)
 		if err != nil {
 			continue
 		}
@@ -206,7 +210,7 @@ func mapExerciseLogs(resp *ActivityResponse, date time.Time) []entity.ExerciseLo
 	logs := make([]entity.ExerciseLog, 0, len(resp.Activities))
 
 	for _, a := range resp.Activities {
-		startedAt, err := time.Parse("2006-01-02T15:04", dateStr+"T"+a.StartTime)
+		startedAt, err := time.ParseInLocation("2006-01-02T15:04", dateStr+"T"+a.StartTime, jst)
 		if err != nil {
 			startedAt, err = time.Parse("2006-01-02T15:04:05.000+00:00", a.StartTime)
 			if err != nil {
