@@ -88,11 +88,13 @@ func main() {
 	importHandler := handler.NewImportHandler(importUC, rdb, cfg.Preprocessor.UploadDir)
 	anomalyRepo := postgres.NewAnomalyRepo(pool)
 	divergenceRepo := postgres.NewDivergenceRepo(pool)
+	adviceRepo := postgres.NewAdviceRepo(pool)
 	vriHandler := handler.NewVRIHandler(mlClient, vriRepo)
 	anomalyHandler := handler.NewAnomalyHandler(mlClient, anomalyRepo)
 	divergenceHandler := handler.NewDivergenceHandler(mlClient, divergenceRepo)
 	hrvHandler := handler.NewHRVHandler(mlClient)
 	weeklyInsightsHandler := handler.NewWeeklyInsightsHandler(mlClient)
+	adviceHandler := handler.NewAdviceHandler(mlClient, adviceRepo)
 	healthkitHandler := handler.NewHealthKitHandler(rdb, cfg.Preprocessor.URL, cfg.Preprocessor.UploadDir)
 
 	// Scheduler
@@ -124,6 +126,7 @@ func main() {
 	divergenceHandler.Register(api)
 	hrvHandler.Register(api)
 	weeklyInsightsHandler.Register(api)
+	adviceHandler.Register(api)
 	healthkitHandler.Register(api)
 
 	// Graceful shutdown
