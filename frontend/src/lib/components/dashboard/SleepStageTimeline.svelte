@@ -15,7 +15,7 @@
 		{ key: 'deep', label: 'Deep', color: '#6366f1' },
 		{ key: 'light', label: 'Light', color: '#60a5fa' },
 		{ key: 'rem', label: 'REM', color: '#34d399' },
-		{ key: 'wake', label: 'Wake', color: '#fbbf24' }
+		{ key: 'wake', label: 'Wake', color: '#f87171' }
 	] as const;
 
 	function stageMinutes(stages: SleepStageEntry[]): Record<string, number> {

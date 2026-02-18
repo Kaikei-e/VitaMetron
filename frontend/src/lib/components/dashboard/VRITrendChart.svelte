@@ -5,10 +5,12 @@
 
 	let {
 		scores,
-		height = '160px'
+		height = '160px',
+		rangeLabel = '7-day'
 	}: {
 		scores: VRIScore[];
 		height?: string;
+		rangeLabel?: string;
 	} = $props();
 
 	let labels = $derived(
@@ -32,8 +34,8 @@
 
 	let ariaLabel = $derived(
 		values.length > 0
-			? `VRI 7-day trend: ${values.map((v) => Math.round(v)).join(', ')}`
-			: 'VRI 7-day trend: no data'
+			? `VRI ${rangeLabel} trend: ${values.map((v) => Math.round(v)).join(', ')}`
+			: `VRI ${rangeLabel} trend: no data`
 	);
 </script>
 

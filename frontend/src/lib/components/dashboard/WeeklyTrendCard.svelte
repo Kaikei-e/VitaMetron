@@ -9,7 +9,8 @@
 		extractor,
 		color = '#3b82f6',
 		unit = '',
-		height = '160px'
+		height = '160px',
+		rangeLabel = '7-day'
 	}: {
 		title: string;
 		summaries: DailySummary[];
@@ -17,6 +18,7 @@
 		color?: string;
 		unit?: string;
 		height?: string;
+		rangeLabel?: string;
 	} = $props();
 
 	let labels = $derived(
@@ -40,8 +42,8 @@
 
 	let ariaLabel = $derived(
 		values.length > 0
-			? `${title} 7-day trend: ${values.join(', ')}${unit ? ' ' + unit : ''}`
-			: `${title} 7-day trend: no data`
+			? `${title} ${rangeLabel} trend: ${values.join(', ')}${unit ? ' ' + unit : ''}`
+			: `${title} ${rangeLabel} trend: no data`
 	);
 </script>
 

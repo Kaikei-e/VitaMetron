@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
-	import { apiFetch } from '$lib/api';
+	import { syncNow as performSync } from '$lib/api/sync';
+	import { formatDateTime } from '$lib/utils/date';
 	import type { DailySummary } from '$lib/types/biometrics';
 
 	let { summary }: { summary: DailySummary | null } = $props();
@@ -8,21 +9,11 @@
 	let syncing = $state(false);
 	let toast = $state<{ message: string; variant: 'success' | 'error' } | null>(null);
 
-	function formatSyncedAt(iso: string): string {
-		return new Date(iso).toLocaleString('ja-JP', {
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
 	async function syncNow() {
 		syncing = true;
 		toast = null;
 		try {
-			const res = await apiFetch('/api/sync', { method: 'POST' });
-			if (!res.ok) throw new Error();
+			await performSync();
 			toast = { message: 'Sync completed!', variant: 'success' };
 		} catch {
 			toast = { message: 'Sync failed.', variant: 'error' };
@@ -46,7 +37,7 @@
 
 	{#if summary}
 		<p class="text-sm text-gray-600">
-			Last synced: <span class="font-medium">{formatSyncedAt(summary.SyncedAt)}</span>
+			Last synced: <span class="font-medium">{formatDateTime(summary.SyncedAt)}</span>
 		</p>
 		<p class="mt-1 text-xs text-gray-400">Provider: {summary.Provider}</p>
 	{:else}

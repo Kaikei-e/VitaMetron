@@ -5,17 +5,19 @@
 		tabs,
 		panel0,
 		panel1,
-		panel2
+		panel2,
+		panel3
 	}: {
 		tabs: string[];
 		panel0: Snippet;
 		panel1: Snippet;
 		panel2: Snippet;
+		panel3?: Snippet;
 	} = $props();
 
 	let activeIndex = $state(0);
 
-	let panels = $derived([panel0, panel1, panel2]);
+	let panels = $derived(panel3 ? [panel0, panel1, panel2, panel3] : [panel0, panel1, panel2]);
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'ArrowRight') {

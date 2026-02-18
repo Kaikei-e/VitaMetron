@@ -1,29 +1,23 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
+	import { vasToTextColor, vasToLabel } from '$lib/utils/condition';
+	import { formatDateTime } from '$lib/utils/date';
 	import type { ConditionLog } from '$lib/types/condition';
 
 	let { condition }: { condition: ConditionLog | null } = $props();
 
-	const colorMap: Record<number, string> = {
-		1: 'text-condition-1',
-		2: 'text-condition-2',
-		3: 'text-condition-3',
-		4: 'text-condition-4',
-		5: 'text-condition-5'
-	};
-
-	let scoreColor = $derived(condition ? colorMap[condition.Overall] ?? '' : '');
-
-	function formatDate(iso: string): string {
-		return new Date(iso).toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-	}
+	let scoreColor = $derived(condition ? vasToTextColor(condition.OverallVAS) : '');
+	let label = $derived(condition ? vasToLabel(condition.OverallVAS) : '');
 </script>
 
 <Card>
 	<h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Today's Condition</h3>
 	{#if condition}
-		<p class="mt-2 text-3xl font-bold {scoreColor}">{condition.Overall}</p>
-		<p class="mt-1 text-xs text-gray-400">{formatDate(condition.LoggedAt)}</p>
+		<div class="mt-2 flex items-baseline gap-2">
+			<span class="text-3xl font-bold {scoreColor}">{condition.OverallVAS}</span>
+			<span class="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+		</div>
+		<p class="mt-1 text-xs text-gray-400">{formatDateTime(condition.LoggedAt)}</p>
 		{#if condition.Tags?.length}
 			<div class="mt-2 flex flex-wrap gap-1">
 				{#each condition.Tags as tag}
