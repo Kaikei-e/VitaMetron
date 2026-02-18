@@ -69,19 +69,23 @@ func main() {
 	fitbitOAuth := fitbit.NewFitbitOAuth(cfg.Fitbit, rdb, tokenRepo, enc)
 	fitbitClient := fitbit.NewFitbitClient(fitbitOAuth)
 
+	who5Repo := postgres.NewWHO5Repo(pool)
+
 	// Use cases
 	conditionUC := application.NewRecordConditionUseCase(conditionRepo)
+	who5UC := application.NewWHO5UseCase(who5Repo)
 	insightsUC := application.NewGetInsightsUseCase(mlClient)
 	syncUC := application.NewSyncBiometricsUseCase(fitbitClient, summaryRepo, hrRepo, sleepRepo, exerciseRepo, qualityRepo)
 
 	// Handlers
 	conditionHandler := handler.NewConditionHandler(conditionUC)
+	who5Handler := handler.NewWHO5Handler(who5UC)
 	insightsHandler := handler.NewInsightsHandler(insightsUC)
 	biometricsHandler := handler.NewBiometricsHandler(summaryRepo, hrRepo, sleepRepo, qualityRepo)
 	oauthHandler := handler.NewOAuthHandler(fitbitOAuth, syncUC)
 	syncHandler := handler.NewSyncHandler(syncUC)
 	importUC := application.NewImportHealthConnectUseCase(summaryRepo, hrRepo, sleepRepo, exerciseRepo)
-	importHandler := handler.NewImportHandler(importUC)
+	importHandler := handler.NewImportHandler(importUC, rdb, cfg.Preprocessor.UploadDir)
 	anomalyRepo := postgres.NewAnomalyRepo(pool)
 	divergenceRepo := postgres.NewDivergenceRepo(pool)
 	vriHandler := handler.NewVRIHandler(mlClient, vriRepo)
@@ -109,6 +113,7 @@ func main() {
 	// Routes
 	api := srv.Echo.Group("/api")
 	conditionHandler.Register(api)
+	who5Handler.Register(api)
 	insightsHandler.Register(api)
 	biometricsHandler.Register(api)
 	oauthHandler.Register(api)

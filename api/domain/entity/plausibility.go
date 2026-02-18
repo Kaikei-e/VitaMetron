@@ -11,6 +11,15 @@ const (
 	SkinTempDeltaMax float32 = 5
 	BRMin            float32 = 4
 	BRMax            float32 = 40
+
+	AvgHRMin         float32 = 25
+	AvgHRMax         float32 = 200
+	MaxHRMin         float32 = 40
+	MaxHRMax         float32 = 230
+	StepsMax         int     = 200000
+	DistanceKMMax    float32 = 300
+	CaloriesTotalMax int     = 15000
+	SleepDurationMax int     = 1440
 )
 
 // allMetrics defines the full set of metrics we track for completeness.
