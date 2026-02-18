@@ -120,7 +120,16 @@ func (h *BiometricsHandler) GetSleepStages(c echo.Context) error {
 	if err == nil && summary != nil && summary.SleepStart != nil && summary.SleepEnd != nil {
 		stages, err = h.sleepStages.ListByTimeRange(ctx, *summary.SleepStart, *summary.SleepEnd)
 	} else {
-		stages, err = h.sleepStages.ListByDate(ctx, date)
+		// Fallback: query a wide overnight window (prev day 18:00 → current day 14:00)
+		// to capture pre-midnight sleep sessions.
+		from := date.Add(-6 * time.Hour)  // previous day 18:00
+		to := date.Add(14 * time.Hour)    // current day 14:00
+		stages, err = h.sleepStages.ListByTimeRange(ctx, from, to)
+	}
+	// Filter to main session on both paths — guards against dual-source duplicates
+	// (Fitbit sync + Health Connect import) where LogID differs.
+	if err == nil {
+		stages = filterMainSleepSession(stages)
 	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -182,6 +191,39 @@ func (h *BiometricsHandler) GetDataQualityRange(c echo.Context) error {
 		qualities = []entity.DataQuality{}
 	}
 	return c.JSON(http.StatusOK, qualities)
+}
+
+// filterMainSleepSession picks stages belonging to the LogID with the most
+// total seconds, discarding nap or secondary sessions.
+func filterMainSleepSession(stages []entity.SleepStage) []entity.SleepStage {
+	if len(stages) == 0 {
+		return stages
+	}
+
+	// Sum total seconds per LogID.
+	totals := make(map[int64]int)
+	for _, s := range stages {
+		totals[s.LogID] += s.Seconds
+	}
+
+	// Find the LogID with the most sleep.
+	var bestID int64
+	var bestSec int
+	for id, sec := range totals {
+		if sec > bestSec {
+			bestID = id
+			bestSec = sec
+		}
+	}
+
+	// Filter to only that session.
+	filtered := make([]entity.SleepStage, 0, len(stages))
+	for _, s := range stages {
+		if s.LogID == bestID {
+			filtered = append(filtered, s)
+		}
+	}
+	return filtered
 }
 
 func (h *BiometricsHandler) Register(g *echo.Group) {

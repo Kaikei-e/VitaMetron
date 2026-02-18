@@ -21,14 +21,15 @@ func NewConditionHandler(uc application.ConditionUseCase) *ConditionHandler {
 }
 
 type createConditionRequest struct {
-	Overall    int        `json:"overall"`
-	Mental     *int       `json:"mental,omitempty"`
-	Physical   *int       `json:"physical,omitempty"`
-	Energy     *int       `json:"energy,omitempty"`
-	OverallVAS *int       `json:"overall_vas,omitempty"`
-	Note       string     `json:"note,omitempty"`
-	Tags       []string   `json:"tags,omitempty"`
-	LoggedAt   *time.Time `json:"logged_at,omitempty"`
+	// VAS 0-100 (primary)
+	Wellbeing    int    `json:"wellbeing"`
+	Mood         *int   `json:"mood,omitempty"`
+	Energy       *int   `json:"energy,omitempty"`
+	SleepQuality *int   `json:"sleep_quality,omitempty"`
+	Stress       *int   `json:"stress,omitempty"`
+	Note         string `json:"note,omitempty"`
+	Tags         []string   `json:"tags,omitempty"`
+	LoggedAt     *time.Time `json:"logged_at,omitempty"`
 }
 
 func (h *ConditionHandler) Create(c echo.Context) error {
@@ -43,14 +44,14 @@ func (h *ConditionHandler) Create(c echo.Context) error {
 	}
 
 	log := &entity.ConditionLog{
-		Overall:    req.Overall,
-		Mental:     req.Mental,
-		Physical:   req.Physical,
-		Energy:     req.Energy,
-		OverallVAS: req.OverallVAS,
-		Note:       req.Note,
-		Tags:       req.Tags,
-		LoggedAt:   loggedAt,
+		OverallVAS:      req.Wellbeing,
+		MoodVAS:         req.Mood,
+		EnergyVAS:       req.Energy,
+		SleepQualityVAS: req.SleepQuality,
+		StressVAS:       req.Stress,
+		Note:            req.Note,
+		Tags:            req.Tags,
+		LoggedAt:        loggedAt,
 	}
 
 	if err := h.uc.Create(c.Request().Context(), log); err != nil {
@@ -110,14 +111,14 @@ func (h *ConditionHandler) List(c echo.Context) error {
 }
 
 type updateConditionRequest struct {
-	Overall    int        `json:"overall"`
-	Mental     *int       `json:"mental,omitempty"`
-	Physical   *int       `json:"physical,omitempty"`
-	Energy     *int       `json:"energy,omitempty"`
-	OverallVAS *int       `json:"overall_vas,omitempty"`
-	Note       string     `json:"note,omitempty"`
-	Tags       []string   `json:"tags,omitempty"`
-	LoggedAt   *time.Time `json:"logged_at,omitempty"`
+	Wellbeing    int    `json:"wellbeing"`
+	Mood         *int   `json:"mood,omitempty"`
+	Energy       *int   `json:"energy,omitempty"`
+	SleepQuality *int   `json:"sleep_quality,omitempty"`
+	Stress       *int   `json:"stress,omitempty"`
+	Note         string `json:"note,omitempty"`
+	Tags         []string   `json:"tags,omitempty"`
+	LoggedAt     *time.Time `json:"logged_at,omitempty"`
 }
 
 func (h *ConditionHandler) Update(c echo.Context) error {
@@ -132,13 +133,13 @@ func (h *ConditionHandler) Update(c echo.Context) error {
 	}
 
 	log := &entity.ConditionLog{
-		Overall:    req.Overall,
-		Mental:     req.Mental,
-		Physical:   req.Physical,
-		Energy:     req.Energy,
-		OverallVAS: req.OverallVAS,
-		Note:       req.Note,
-		Tags:       req.Tags,
+		OverallVAS:      req.Wellbeing,
+		MoodVAS:         req.Mood,
+		EnergyVAS:       req.Energy,
+		SleepQualityVAS: req.SleepQuality,
+		StressVAS:       req.Stress,
+		Note:            req.Note,
+		Tags:            req.Tags,
 	}
 	if req.LoggedAt != nil {
 		log.LoggedAt = *req.LoggedAt

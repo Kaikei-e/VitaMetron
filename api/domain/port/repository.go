@@ -71,3 +71,10 @@ type DivergenceRepository interface {
 	GetByDate(ctx context.Context, date time.Time) (*entity.DivergenceDetection, error)
 	ListRange(ctx context.Context, from, to time.Time) ([]entity.DivergenceDetection, error)
 }
+
+type WHO5Repository interface {
+	Create(ctx context.Context, a *entity.WHO5Assessment) error
+	GetByID(ctx context.Context, id int64) (*entity.WHO5Assessment, error)
+	GetLatest(ctx context.Context) (*entity.WHO5Assessment, error)
+	List(ctx context.Context, limit, offset int) ([]entity.WHO5Assessment, int, error)
+}

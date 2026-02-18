@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,10 @@ import (
 
 	"vitametron/api/domain/entity"
 )
+
+func countSubstring(s, sub string) int {
+	return strings.Count(s, sub)
+}
 
 type stubDailySummaryRepo struct {
 	summary   *entity.DailySummary
@@ -44,8 +49,9 @@ func (s *stubHeartRateRepo) ListRange(_ context.Context, _, _ time.Time) ([]enti
 }
 
 type stubSleepStageRepo struct {
-	stages []entity.SleepStage
-	err    error
+	stages          []entity.SleepStage
+	timeRangeStages []entity.SleepStage // if set, ListByTimeRange returns this instead
+	err             error
 }
 
 func (s *stubSleepStageRepo) BulkUpsert(_ context.Context, _ []entity.SleepStage) error {
@@ -57,6 +63,9 @@ func (s *stubSleepStageRepo) ListByDate(_ context.Context, _ time.Time) ([]entit
 }
 
 func (s *stubSleepStageRepo) ListByTimeRange(_ context.Context, _, _ time.Time) ([]entity.SleepStage, error) {
+	if s.timeRangeStages != nil {
+		return s.timeRangeStages, s.err
+	}
 	return s.stages, s.err
 }
 
@@ -294,6 +303,112 @@ func TestBiometricsHandler_GetSleepStages_FallbackToListByDate(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+}
+
+func TestBiometricsHandler_GetSleepStages_FallbackFiltersMainSession(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/sleep/stages?date=2025-06-15", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// No summary → fallback uses ListByTimeRange with overnight window.
+	// Two sessions: LogID 100 (main, 7h) and LogID 200 (nap, 30min).
+	h := NewBiometricsHandler(
+		&stubDailySummaryRepo{summary: nil},
+		&stubHeartRateRepo{},
+		&stubSleepStageRepo{timeRangeStages: []entity.SleepStage{
+			{Stage: "deep", Seconds: 3600, LogID: 100},
+			{Stage: "light", Seconds: 10800, LogID: 100},
+			{Stage: "rem", Seconds: 7200, LogID: 100},
+			{Stage: "wake", Seconds: 3600, LogID: 100},
+			{Stage: "light", Seconds: 1800, LogID: 200}, // nap
+		}},
+		&stubDataQualityRepo{},
+	)
+	if err := h.GetSleepStages(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	// Response should only contain LogID 100 stages (4 entries), not LogID 200.
+	body := rec.Body.String()
+	// Count occurrences of LogID fields — should have 4 for main session only
+	if count := countSubstring(body, `"LogID":100`); count != 4 {
+		t.Errorf("expected 4 stages with LogID 100, got %d in: %s", count, body)
+	}
+	if count := countSubstring(body, `"LogID":200`); count != 0 {
+		t.Errorf("expected 0 stages with LogID 200, got %d in: %s", count, body)
+	}
+}
+
+func TestFilterMainSleepSession(t *testing.T) {
+	stages := []entity.SleepStage{
+		{Stage: "deep", Seconds: 3600, LogID: 1},
+		{Stage: "light", Seconds: 7200, LogID: 1},
+		{Stage: "light", Seconds: 1800, LogID: 2},
+	}
+	filtered := filterMainSleepSession(stages)
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 stages, got %d", len(filtered))
+	}
+	for _, s := range filtered {
+		if s.LogID != 1 {
+			t.Errorf("expected LogID 1, got %d", s.LogID)
+		}
+	}
+}
+
+func TestFilterMainSleepSession_Empty(t *testing.T) {
+	filtered := filterMainSleepSession(nil)
+	if len(filtered) != 0 {
+		t.Fatalf("expected 0 stages, got %d", len(filtered))
+	}
+}
+
+func TestBiometricsHandler_GetSleepStages_PrimaryPathFiltersDuplicates(t *testing.T) {
+	sleepStart := time.Date(2025, 6, 14, 23, 0, 0, 0, time.UTC)
+	sleepEnd := time.Date(2025, 6, 15, 7, 0, 0, 0, time.UTC)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/sleep/stages?date=2025-06-15", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Summary exists (primary path) but stages contain dual-source duplicates:
+	// Fitbit (LogID 999, 340min) + Health Connect (LogID 0, 132min).
+	// filterMainSleepSession should keep only the Fitbit session.
+	h := NewBiometricsHandler(
+		&stubDailySummaryRepo{summary: &entity.DailySummary{
+			SleepStart: &sleepStart,
+			SleepEnd:   &sleepEnd,
+		}},
+		&stubHeartRateRepo{},
+		&stubSleepStageRepo{timeRangeStages: []entity.SleepStage{
+			{Stage: "deep", Seconds: 4800, LogID: 999},
+			{Stage: "light", Seconds: 9000, LogID: 999},
+			{Stage: "rem", Seconds: 4200, LogID: 999},
+			{Stage: "wake", Seconds: 2400, LogID: 999},
+			{Stage: "deep", Seconds: 1800, LogID: 0},
+			{Stage: "light", Seconds: 3600, LogID: 0},
+			{Stage: "rem", Seconds: 2520, LogID: 0},
+		}},
+		&stubDataQualityRepo{},
+	)
+	if err := h.GetSleepStages(c); err != nil {
+		t.Fatal(err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	// Should only contain LogID 999 (Fitbit), not LogID 0 (HC)
+	if count := countSubstring(body, `"LogID":999`); count != 4 {
+		t.Errorf("expected 4 stages with LogID 999, got %d in: %s", count, body)
+	}
+	if count := countSubstring(body, `"LogID":0`); count != 0 {
+		t.Errorf("expected 0 stages with LogID 0, got %d in: %s", count, body)
 	}
 }
 

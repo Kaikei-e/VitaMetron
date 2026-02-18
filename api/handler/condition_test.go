@@ -60,7 +60,7 @@ func (s *stubConditionUseCase) GetSummary(_ context.Context, _, _ time.Time) (*e
 func TestConditionHandler_Create_Success(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/conditions",
-		strings.NewReader(`{"overall":3,"note":"feeling ok"}`))
+		strings.NewReader(`{"wellbeing":75,"note":"feeling ok"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -96,7 +96,7 @@ func TestConditionHandler_Create_InvalidJSON(t *testing.T) {
 func TestConditionHandler_Create_ValidationError(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPost, "/api/conditions",
-		strings.NewReader(`{"overall":0}`))
+		strings.NewReader(`{"wellbeing":50}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -113,6 +113,24 @@ func TestConditionHandler_Create_ValidationError(t *testing.T) {
 	}
 }
 
+func TestConditionHandler_Create_WithAllVAS(t *testing.T) {
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/conditions",
+		strings.NewReader(`{"wellbeing":75,"mood":60,"energy":80,"sleep_quality":70,"stress":65}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	h := NewConditionHandler(&stubConditionUseCase{})
+	if err := h.Create(c); err != nil {
+		t.Fatal(err)
+	}
+
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+}
+
 func TestConditionHandler_GetByID_Success(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/conditions/1", nil)
@@ -122,7 +140,7 @@ func TestConditionHandler_GetByID_Success(t *testing.T) {
 	c.SetParamValues("1")
 
 	h := NewConditionHandler(&stubConditionUseCase{
-		getByIDLog: &entity.ConditionLog{ID: 1, Overall: 4},
+		getByIDLog: &entity.ConditionLog{ID: 1, OverallVAS: 75, Overall: 4},
 	})
 	if err := h.GetByID(c); err != nil {
 		t.Fatal(err)
@@ -180,8 +198,8 @@ func TestConditionHandler_List(t *testing.T) {
 	h := NewConditionHandler(&stubConditionUseCase{
 		listResult: &entity.ConditionListResult{
 			Items: []entity.ConditionLog{
-				{ID: 1, Overall: 4},
-				{ID: 2, Overall: 3},
+				{ID: 1, OverallVAS: 75, Overall: 4},
+				{ID: 2, OverallVAS: 50, Overall: 3},
 			},
 			Total: 2,
 		},
@@ -208,7 +226,7 @@ func TestConditionHandler_List(t *testing.T) {
 
 func TestConditionHandler_List_WithPagination(t *testing.T) {
 	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/conditions?limit=10&offset=5&tag=headache&sort=overall&order=asc", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/conditions?limit=10&offset=5&tag=headache&sort=overall_vas&order=asc", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -230,7 +248,7 @@ func TestConditionHandler_List_WithPagination(t *testing.T) {
 func TestConditionHandler_Update_Success(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/api/conditions/1",
-		strings.NewReader(`{"overall":4,"note":"updated"}`))
+		strings.NewReader(`{"wellbeing":80,"note":"updated"}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -270,7 +288,7 @@ func TestConditionHandler_Update_InvalidJSON(t *testing.T) {
 func TestConditionHandler_Update_NotFound(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodPut, "/api/conditions/999",
-		strings.NewReader(`{"overall":4}`))
+		strings.NewReader(`{"wellbeing":80}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -344,10 +362,10 @@ func TestConditionHandler_GetSummary(t *testing.T) {
 
 	h := NewConditionHandler(&stubConditionUseCase{
 		summary: &entity.ConditionSummary{
-			TotalCount: 10,
-			OverallAvg: 3.5,
-			OverallMin: 1,
-			OverallMax: 5,
+			TotalCount:    10,
+			OverallVASAvg: 65.0,
+			OverallVASMin: 20,
+			OverallVASMax: 95,
 		},
 	})
 	if err := h.GetSummary(c); err != nil {
