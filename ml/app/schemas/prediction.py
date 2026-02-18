@@ -10,7 +10,7 @@ class ContributingFactor(BaseModel):
 
 
 class PredictionResponse(BaseModel):
-    predicted_score: float = Field(ge=1.0, le=5.0)
+    predicted_score: float = Field(ge=0.0, le=100.0)
     confidence: float = Field(ge=0.0, le=1.0)
     contributing_factors: list[ContributingFactor] = []
     risk_signals: list[str] = []

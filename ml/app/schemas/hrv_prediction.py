@@ -24,7 +24,7 @@ class HRVPredictionResponse(BaseModel):
 class HRVTrainRequest(BaseModel):
     start_date: datetime.date | None = None
     end_date: datetime.date | None = None
-    optuna_trials: int = Field(default=50, ge=10, le=200)
+    optuna_trials: int = Field(default=100, ge=10, le=500)
     include_lstm: bool = True
     lstm_lookback_days: int = Field(default=7, ge=3, le=14)
 
