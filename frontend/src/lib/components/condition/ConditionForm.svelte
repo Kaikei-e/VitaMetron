@@ -40,7 +40,7 @@
 		if (stress !== null) body.stress = stress;
 		if (note.trim()) body.note = note.trim();
 		if (tags.length > 0) body.tags = tags;
-		body.logged_at = `${logDate}T12:00:00Z`;
+		body.logged_at = new Date(`${logDate}T12:00:00`).toISOString();
 
 		try {
 			await createCondition(body);

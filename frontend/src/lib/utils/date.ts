@@ -27,12 +27,15 @@ export function formatShortDate(iso: string): string {
 	});
 }
 
-/** Today as "YYYY-MM-DD" */
+/** Today as "YYYY-MM-DD" (local timezone) */
 export function todayISO(): string {
-	return new Date().toISOString().slice(0, 10);
+	const d = new Date();
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** N days ago as "YYYY-MM-DD" */
+/** N days ago as "YYYY-MM-DD" (local timezone) */
 export function daysAgoISO(n: number): string {
-	return new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+	const d = new Date();
+	d.setDate(d.getDate() - n);
+	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }

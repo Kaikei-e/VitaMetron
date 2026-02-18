@@ -38,13 +38,17 @@
 		return 'normal';
 	});
 
+	function formatLocalDate(d: Date): string {
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
 	function getPeriodDates() {
 		const end = new Date();
 		const start = new Date();
 		start.setDate(end.getDate() - 14);
 		return {
-			start: start.toISOString().slice(0, 10),
-			end: end.toISOString().slice(0, 10)
+			start: formatLocalDate(start),
+			end: formatLocalDate(end)
 		};
 	}
 
