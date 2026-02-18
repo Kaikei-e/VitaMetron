@@ -46,6 +46,8 @@ class HRVPredictor:
         self._feature_names: list[str] = []
         self._feature_medians: np.ndarray | None = None
         self._feature_stds: np.ndarray | None = None
+        self._winsor_low: np.ndarray | None = None
+        self._winsor_high: np.ndarray | None = None
         self._model_version: str = ""
         self._cv_metrics: dict = {}
         self._best_params: dict = {}
@@ -98,12 +100,35 @@ class HRVPredictor:
             Training metadata dict.
         """
         self._feature_names = feature_names
+
+        # IQR-based outlier filtering on target variable (y)
+        # Conservative multiplier=3.0 removes only sensor errors
+        q1 = np.nanpercentile(y, 25)
+        q3 = np.nanpercentile(y, 75)
+        iqr = q3 - q1
+        lower_bound = q1 - 3.0 * iqr
+        upper_bound = q3 + 3.0 * iqr
+        inlier_mask = (y >= lower_bound) & (y <= upper_bound)
+        n_removed = int(np.sum(~inlier_mask))
+        if n_removed > 0:
+            logger.info(
+                "IQR outlier filter: removed %d/%d samples (bounds=[%.3f, %.3f])",
+                n_removed, len(y), lower_bound, upper_bound,
+            )
+            X = X[inlier_mask]
+            y = y[inlier_mask]
+            dates = [d for d, keep in zip(dates, inlier_mask) if keep]
+
         self._training_days = X.shape[0]
 
         # Compute training statistics for normalization
         self._feature_medians = np.nanmedian(X, axis=0)
         self._feature_stds = np.nanstd(X, axis=0)
         self._feature_stds[self._feature_stds == 0] = 1.0
+
+        # Compute winsorization bounds (1st/99th percentile) for features
+        self._winsor_low = np.nanpercentile(X, 1, axis=0)
+        self._winsor_high = np.nanpercentile(X, 99, axis=0)
 
         # Optuna hyperparameter search
         best_params = self._optuna_search(
@@ -212,12 +237,15 @@ class HRVPredictor:
         return best
 
     def _impute_and_normalize(self, X: np.ndarray) -> np.ndarray:
-        """Impute NaN with training medians and normalize."""
+        """Impute NaN with training medians, winsorize, and normalize."""
         X_out = X.copy()
         for col in range(X_out.shape[1]):
             mask = np.isnan(X_out[:, col])
             if mask.any():
                 X_out[mask, col] = self._feature_medians[col]
+        # Winsorize: clip features to 1st/99th percentile bounds
+        if self._winsor_low is not None and self._winsor_high is not None:
+            X_out = np.clip(X_out, self._winsor_low, self._winsor_high)
         X_out = (X_out - self._feature_medians) / self._feature_stds
         return X_out
 
@@ -240,6 +268,10 @@ class HRVPredictor:
             if np.isnan(features_prepared[i]):
                 features_prepared[i] = self._feature_medians[i]
                 nan_count += 1
+
+        # Winsorize
+        if self._winsor_low is not None and self._winsor_high is not None:
+            features_prepared = np.clip(features_prepared, self._winsor_low, self._winsor_high)
 
         # Normalize
         features_prepared = (features_prepared - self._feature_medians) / self._feature_stds
@@ -271,6 +303,9 @@ class HRVPredictor:
             if np.isnan(features_prepared[i]):
                 features_prepared[i] = self._feature_medians[i]
 
+        if self._winsor_low is not None and self._winsor_high is not None:
+            features_prepared = np.clip(features_prepared, self._winsor_low, self._winsor_high)
+
         features_prepared = (features_prepared - self._feature_medians) / self._feature_stds
 
         explainer = shap.TreeExplainer(self._model)
@@ -294,6 +329,8 @@ class HRVPredictor:
             {
                 "feature_medians": self._feature_medians,
                 "feature_stds": self._feature_stds,
+                "winsor_low": self._winsor_low,
+                "winsor_high": self._winsor_high,
             },
             self._store / "hrv_scaler.joblib",
         )
@@ -329,6 +366,8 @@ class HRVPredictor:
             scaler = joblib.load(scaler_path)
             self._feature_medians = scaler["feature_medians"]
             self._feature_stds = scaler["feature_stds"]
+            self._winsor_low = scaler.get("winsor_low")
+            self._winsor_high = scaler.get("winsor_high")
 
             config = json.loads(config_path.read_text())
             self._model_version = config["model_version"]

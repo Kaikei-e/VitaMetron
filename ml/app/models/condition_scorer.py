@@ -14,9 +14,9 @@ def rule_based_score(
     """
     # Quality gate: if the day is invalid, return neutral score with very low confidence
     if features.get("is_valid_day") is False:
-        return 3.0, 0.1, []
+        return 50.0, 0.1, []
 
-    score = 3.0  # neutral baseline
+    score = 50.0  # neutral baseline (VAS 0-100)
     factors: list[ContributingFactor] = []
 
     # HRV: higher = better recovery
@@ -25,19 +25,19 @@ def rule_based_score(
     hrv_delta = features.get("hrv_delta")
     if hrv_delta is not None:
         if hrv_delta > 5:
-            score += 0.3
+            score += 6
             factors.append(ContributingFactor(
                 feature="hrv",
-                importance=0.3,
+                importance=6,
                 direction="positive",
                 value=float(hrv) if hrv else 0.0,
                 baseline=float(hrv_7d) if hrv_7d else 0.0,
             ))
         elif hrv_delta < -10:
-            score -= 0.5
+            score -= 10
             factors.append(ContributingFactor(
                 feature="hrv",
-                importance=0.5,
+                importance=10,
                 direction="negative",
                 value=float(hrv) if hrv else 0.0,
                 baseline=float(hrv_7d) if hrv_7d else 0.0,
@@ -49,19 +49,19 @@ def rule_based_score(
     if sleep_min is not None:
         hours = sleep_min / 60
         if 7 <= hours <= 9:
-            score += 0.3
+            score += 6
             factors.append(ContributingFactor(
                 feature="sleep_duration",
-                importance=0.3,
+                importance=6,
                 direction="positive",
                 value=float(sleep_min),
                 baseline=float(sleep_7d) if sleep_7d else 0.0,
             ))
         elif hours < 5:
-            score -= 0.8
+            score -= 16
             factors.append(ContributingFactor(
                 feature="sleep_duration",
-                importance=0.8,
+                importance=16,
                 direction="negative",
                 value=float(sleep_min),
                 baseline=float(sleep_7d) if sleep_7d else 0.0,
@@ -72,19 +72,19 @@ def rule_based_score(
     deep_7d = features.get("deep_sleep_7d")
     if deep_min is not None:
         if deep_min >= 60:
-            score += 0.2
+            score += 4
             factors.append(ContributingFactor(
                 feature="deep_sleep",
-                importance=0.2,
+                importance=4,
                 direction="positive",
                 value=float(deep_min),
                 baseline=float(deep_7d) if deep_7d else 0.0,
             ))
         elif deep_min < 30:
-            score -= 0.3
+            score -= 6
             factors.append(ContributingFactor(
                 feature="deep_sleep",
-                importance=0.3,
+                importance=6,
                 direction="negative",
                 value=float(deep_min),
                 baseline=float(deep_7d) if deep_7d else 0.0,
@@ -95,10 +95,10 @@ def rule_based_score(
     rhr_7d = features.get("rhr_7d")
     rhr_delta = features.get("resting_hr_delta")
     if rhr_delta is not None and rhr_delta > 5:
-        score -= 0.4
+        score -= 8
         factors.append(ContributingFactor(
             feature="resting_hr",
-            importance=0.4,
+            importance=8,
             direction="negative",
             value=float(rhr) if rhr else 0.0,
             baseline=float(rhr_7d) if rhr_7d else 0.0,
@@ -108,10 +108,10 @@ def rule_based_score(
     spo2 = features.get("spo2_avg")
     spo2_7d = features.get("spo2_7d")
     if spo2 is not None and spo2 < 93:
-        score -= 0.5
+        score -= 10
         factors.append(ContributingFactor(
             feature="spo2",
-            importance=0.5,
+            importance=10,
             direction="negative",
             value=float(spo2),
             baseline=float(spo2_7d) if spo2_7d else 0.0,
@@ -123,25 +123,25 @@ def rule_based_score(
     steps_7d = features.get("steps_7d")
     if steps_delta is not None:
         if steps_delta > 3000:
-            score += 0.2
+            score += 4
             factors.append(ContributingFactor(
                 feature="steps",
-                importance=0.2,
+                importance=4,
                 direction="positive",
                 value=float(steps) if steps else 0.0,
                 baseline=float(steps_7d) if steps_7d else 0.0,
             ))
         elif steps_delta < -5000:
-            score -= 0.2
+            score -= 4
             factors.append(ContributingFactor(
                 feature="steps",
-                importance=0.2,
+                importance=4,
                 direction="negative",
                 value=float(steps) if steps else 0.0,
                 baseline=float(steps_7d) if steps_7d else 0.0,
             ))
 
-    score = max(1.0, min(5.0, score))
+    score = max(0.0, min(100.0, score))
     confidence = 0.4  # rule-based = low confidence
 
     # Cap confidence by data quality confidence score if available

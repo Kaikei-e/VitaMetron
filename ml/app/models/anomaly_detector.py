@@ -25,6 +25,8 @@ class AnomalyDetector:
         self._train_score_max: float = 1.0
         self._feature_names: list[str] = []
         self._feature_medians: np.ndarray | None = None
+        self._winsor_low: np.ndarray | None = None
+        self._winsor_high: np.ndarray | None = None
         self._model_version: str = ""
 
     @property
@@ -68,6 +70,11 @@ class AnomalyDetector:
             mask = np.isnan(X_imputed[:, col])
             if mask.any():
                 X_imputed[mask, col] = self._feature_medians[col]
+
+        # Winsorize: clip features to 1st/99th percentile to suppress extreme values
+        self._winsor_low = np.percentile(X_imputed, 1, axis=0)
+        self._winsor_high = np.percentile(X_imputed, 99, axis=0)
+        X_imputed = np.clip(X_imputed, self._winsor_low, self._winsor_high)
 
         # Fit Isolation Forest
         self._model = IsolationForest(
@@ -162,6 +169,10 @@ class AnomalyDetector:
                 features_imputed[i] = self._feature_medians[i]
                 nan_count += 1
 
+        # Winsorize
+        if self._winsor_low is not None and self._winsor_high is not None:
+            features_imputed = np.clip(features_imputed, self._winsor_low, self._winsor_high)
+
         # Get raw score from isolation forest
         raw_score = float(self._model.decision_function(features_imputed.reshape(1, -1))[0])
 
@@ -202,6 +213,9 @@ class AnomalyDetector:
             if np.isnan(features_imputed[i]):
                 features_imputed[i] = self._feature_medians[i]
 
+        if self._winsor_low is not None and self._winsor_high is not None:
+            features_imputed = np.clip(features_imputed, self._winsor_low, self._winsor_high)
+
         explainer = shap.TreeExplainer(self._model)
         shap_values = explainer.shap_values(features_imputed.reshape(1, -1))
 
@@ -225,6 +239,8 @@ class AnomalyDetector:
                 "train_score_min": self._train_score_min,
                 "train_score_max": self._train_score_max,
                 "feature_medians": self._feature_medians,
+                "winsor_low": self._winsor_low,
+                "winsor_high": self._winsor_high,
             },
             self._store / "pot_params.joblib",
         )
@@ -258,6 +274,8 @@ class AnomalyDetector:
             self._train_score_min = params["train_score_min"]
             self._train_score_max = params["train_score_max"]
             self._feature_medians = params["feature_medians"]
+            self._winsor_low = params.get("winsor_low")
+            self._winsor_high = params.get("winsor_high")
 
             config = json.loads(config_path.read_text())
             self._model_version = config["model_version"]
