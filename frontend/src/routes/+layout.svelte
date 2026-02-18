@@ -1,5 +1,6 @@
 <script lang="ts">
 	import '../app.css';
+	import { page } from '$app/state';
 	import Sidebar from '$lib/components/navigation/Sidebar.svelte';
 	import BottomNav from '$lib/components/navigation/BottomNav.svelte';
 	import ConditionFAB from '$lib/components/condition/ConditionFAB.svelte';
@@ -22,7 +23,9 @@
 		{@render children()}
 	</main>
 	<div class="lg:hidden">
-		<ConditionFAB />
+		{#if page.url.pathname.startsWith('/conditions')}
+			<ConditionFAB />
+		{/if}
 		<BottomNav />
 	</div>
 </div>

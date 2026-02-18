@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="ring" x1=".2" y1="0" x2=".8" y2="1">
+      <stop offset="0%" stop-color="#7E96A6"/>
+      <stop offset="100%" stop-color="#A6B8C3"/>
+    </linearGradient>
+    <radialGradient id="glow">
+      <stop offset="0%" stop-color="#fff"/>
+      <stop offset="70%" stop-color="#FDFAF7"/>
+      <stop offset="100%" stop-color="#EDE5DC"/>
+    </radialGradient>
+  </defs>
+  <!-- Ring -->
+  <circle cx="256" cy="256" r="234" fill="none" stroke="url(#ring)" stroke-width="44"/>
+  <!-- Inner glow band -->
+  <circle cx="256" cy="256" r="214" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="4"/>
+  <!-- Inner fill -->
+  <circle cx="256" cy="256" r="212" fill="url(#glow)"/>
+  <!-- V logo — blue-gray (back) -->
+  <polyline points="176,208 256,304 336,208" fill="none" stroke="#8399A8" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- V logo — terracotta (front) -->
+  <polyline points="176,228 256,324 336,228" fill="none" stroke="#C27048" stroke-width="26" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

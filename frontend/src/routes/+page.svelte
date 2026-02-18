@@ -9,6 +9,7 @@
 	import SleepStageTimeline from '$lib/components/dashboard/SleepStageTimeline.svelte';
 	import VRICard from '$lib/components/dashboard/VRICard.svelte';
 	import VRITrendChart from '$lib/components/dashboard/VRITrendChart.svelte';
+	import { formatDateTime } from '$lib/utils/date';
 	import type { MetricComparison } from '$lib/types/biometrics';
 
 	let { data } = $props();
@@ -24,10 +25,6 @@
 			.map((v) => new Date(v));
 		if (candidates.length === 0) return null;
 		return candidates.reduce((a, b) => (a > b ? a : b));
-	}
-
-	function formatLastUpdated(d: Date): string {
-		return d.toLocaleString('ja-JP', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 	}
 
 	function delta(today: number | null, yesterday: number | null): number | null {
@@ -98,7 +95,7 @@
 	<h1 class="text-2xl font-bold">Dashboard</h1>
 	{#if lastUpdated()}
 		<span class="text-xs text-gray-400">
-			Last updated: {formatLastUpdated(lastUpdated()!)}
+			Last updated: {formatDateTime(lastUpdated()!.toISOString())}
 		</span>
 	{/if}
 </div>
@@ -126,7 +123,7 @@
 </div>
 
 <!-- Tabbed sections -->
-<DashboardTabs tabs={['現在', '1日', '7日']}>
+<DashboardTabs tabs={['現在', '1日', '7日', '30日']}>
 	{#snippet panel0()}
 		{#if data.dataQuality}
 			<div class="flex items-center gap-2 mb-3">
@@ -207,6 +204,48 @@
 		</div>
 		<div class="mt-4">
 			<VRITrendChart scores={data.weekVRI} />
+		</div>
+	{/snippet}
+
+	{#snippet panel3()}
+		<div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
+			<WeeklyTrendCard
+				title="Resting HR"
+				summaries={data.monthSummaries}
+				extractor={(s) => s.RestingHR}
+				color="#ef4444"
+				unit="bpm"
+				rangeLabel="30-day"
+			/>
+			<WeeklyTrendCard
+				title="HRV"
+				summaries={data.monthSummaries}
+				extractor={(s) => s.HRVDailyRMSSD}
+				color="#8b5cf6"
+				unit="ms"
+				rangeLabel="30-day"
+			/>
+			<WeeklyTrendCard
+				title="Sleep"
+				summaries={data.monthSummaries}
+				extractor={(s) => s.SleepDurationMin / 60}
+				color="#06b6d4"
+				unit="hr"
+				rangeLabel="30-day"
+			/>
+			<WeeklyTrendCard
+				title="Steps"
+				summaries={data.monthSummaries}
+				extractor={(s) => s.Steps}
+				color="#22c55e"
+				rangeLabel="30-day"
+			/>
+		</div>
+		<div class="mt-4">
+			<VRITrendChart scores={data.monthVRI} rangeLabel="30-day" />
+		</div>
+		<div class="mt-4">
+			<TrendChart conditions={data.monthConditions} rangeLabel="30-day" />
 		</div>
 	{/snippet}
 </DashboardTabs>
