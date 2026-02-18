@@ -16,3 +16,13 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 		clearTimeout(timeout);
 	}
 }
+
+/** Fetch JSON with safe error handling — returns fallback on any failure */
+export async function fetchJSON<T>(path: string, fallback: T): Promise<T> {
+	try {
+		const res = await apiFetch(path);
+		return (await res.json()) as T;
+	} catch {
+		return fallback;
+	}
+}
