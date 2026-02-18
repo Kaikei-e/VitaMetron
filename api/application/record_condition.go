@@ -17,6 +17,10 @@ func NewRecordConditionUseCase(repo port.ConditionRepository) *RecordConditionUs
 }
 
 func (uc *RecordConditionUseCase) Create(ctx context.Context, log *entity.ConditionLog) error {
+	// Auto-compute legacy Overall from OverallVAS if not set
+	if log.Overall == 0 {
+		log.Overall = entity.VASToLegacyOverall(log.OverallVAS)
+	}
 	if err := log.Validate(); err != nil {
 		return err
 	}
@@ -45,6 +49,10 @@ func (uc *RecordConditionUseCase) List(ctx context.Context, filter entity.Condit
 }
 
 func (uc *RecordConditionUseCase) Update(ctx context.Context, id int64, log *entity.ConditionLog) error {
+	// Auto-compute legacy Overall from OverallVAS if not set
+	if log.Overall == 0 {
+		log.Overall = entity.VASToLegacyOverall(log.OverallVAS)
+	}
 	if err := log.Validate(); err != nil {
 		return err
 	}

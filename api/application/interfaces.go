@@ -29,3 +29,10 @@ type InsightsResult struct {
 	Prediction *entity.ConditionPrediction
 	Risks      []string
 }
+
+type WHO5UseCaseInterface interface {
+	Create(ctx context.Context, a *entity.WHO5Assessment) error
+	GetLatest(ctx context.Context) (*entity.WHO5Assessment, error)
+	GetByID(ctx context.Context, id int64) (*entity.WHO5Assessment, error)
+	List(ctx context.Context, limit, offset int) ([]entity.WHO5Assessment, int, error)
+}

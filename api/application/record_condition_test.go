@@ -20,12 +20,15 @@ func TestRecordCondition_Create_Success(t *testing.T) {
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
+	log := &entity.ConditionLog{OverallVAS: 50, LoggedAt: time.Now()}
 	if err := uc.Create(context.Background(), log); err != nil {
 		t.Fatalf("Create() error = %v", err)
 	}
 	if !created {
 		t.Error("repo.Create was not called")
+	}
+	if log.Overall == 0 {
+		t.Error("Overall should be auto-computed from OverallVAS")
 	}
 }
 
@@ -39,7 +42,7 @@ func TestRecordCondition_Create_ValidationError(t *testing.T) {
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 0} // invalid
+	log := &entity.ConditionLog{OverallVAS: -1} // invalid
 	if err := uc.Create(context.Background(), log); err == nil {
 		t.Error("Create() expected validation error, got nil")
 	}
@@ -56,14 +59,14 @@ func TestRecordCondition_Create_RepoError(t *testing.T) {
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
+	log := &entity.ConditionLog{OverallVAS: 50, LoggedAt: time.Now()}
 	if err := uc.Create(context.Background(), log); err == nil {
 		t.Error("Create() expected error from repo, got nil")
 	}
 }
 
 func TestRecordCondition_GetByID_Success(t *testing.T) {
-	expected := &entity.ConditionLog{ID: 1, Overall: 3, LoggedAt: time.Now()}
+	expected := &entity.ConditionLog{ID: 1, OverallVAS: 75, Overall: 4, LoggedAt: time.Now()}
 	repo := &mocks.MockConditionRepository{
 		GetByIDFunc: func(_ context.Context, id int64) (*entity.ConditionLog, error) {
 			if id != 1 {
@@ -101,8 +104,8 @@ func TestRecordCondition_List(t *testing.T) {
 	now := time.Now()
 	expected := &entity.ConditionListResult{
 		Items: []entity.ConditionLog{
-			{ID: 1, Overall: 3, LoggedAt: now},
-			{ID: 2, Overall: 5, LoggedAt: now},
+			{ID: 1, OverallVAS: 50, Overall: 3, LoggedAt: now},
+			{ID: 2, OverallVAS: 90, Overall: 5, LoggedAt: now},
 		},
 		Total: 2,
 	}
@@ -146,7 +149,7 @@ func TestRecordCondition_List_LimitCapped(t *testing.T) {
 }
 
 func TestRecordCondition_Update_Success(t *testing.T) {
-	existing := &entity.ConditionLog{ID: 1, Overall: 3, LoggedAt: time.Now()}
+	existing := &entity.ConditionLog{ID: 1, OverallVAS: 50, Overall: 3, LoggedAt: time.Now()}
 	var updated bool
 	repo := &mocks.MockConditionRepository{
 		GetByIDFunc: func(_ context.Context, _ int64) (*entity.ConditionLog, error) {
@@ -162,7 +165,7 @@ func TestRecordCondition_Update_Success(t *testing.T) {
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 4, LoggedAt: time.Now()}
+	log := &entity.ConditionLog{OverallVAS: 80, LoggedAt: time.Now()}
 	if err := uc.Update(context.Background(), 1, log); err != nil {
 		t.Fatalf("Update() error = %v", err)
 	}
@@ -175,7 +178,7 @@ func TestRecordCondition_Update_ValidationError(t *testing.T) {
 	repo := &mocks.MockConditionRepository{}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 0} // invalid
+	log := &entity.ConditionLog{OverallVAS: 150} // invalid VAS
 	if err := uc.Update(context.Background(), 1, log); err == nil {
 		t.Error("Update() expected validation error, got nil")
 	}
@@ -189,7 +192,7 @@ func TestRecordCondition_Update_NotFound(t *testing.T) {
 	}
 	uc := NewRecordConditionUseCase(repo)
 
-	log := &entity.ConditionLog{Overall: 3, LoggedAt: time.Now()}
+	log := &entity.ConditionLog{OverallVAS: 50, LoggedAt: time.Now()}
 	err := uc.Update(context.Background(), 999, log)
 	if !errors.Is(err, entity.ErrNotFound) {
 		t.Errorf("Update() error = %v, want ErrNotFound", err)
@@ -238,10 +241,10 @@ func TestRecordCondition_GetTags(t *testing.T) {
 func TestRecordCondition_GetSummary(t *testing.T) {
 	now := time.Now()
 	expected := &entity.ConditionSummary{
-		TotalCount: 10,
-		OverallAvg: 3.5,
-		OverallMin: 1,
-		OverallMax: 5,
+		TotalCount:    10,
+		OverallVASAvg: 65.0,
+		OverallVASMin: 20,
+		OverallVASMax: 95,
 	}
 	repo := &mocks.MockConditionRepository{
 		GetSummaryFunc: func(_ context.Context, _, _ time.Time) (*entity.ConditionSummary, error) {
@@ -256,5 +259,21 @@ func TestRecordCondition_GetSummary(t *testing.T) {
 	}
 	if result.TotalCount != 10 {
 		t.Errorf("GetSummary() TotalCount = %d, want 10", result.TotalCount)
+	}
+}
+
+func TestRecordCondition_VASToLegacyConversion(t *testing.T) {
+	tests := []struct {
+		vas     int
+		wantLeg int
+	}{
+		{0, 1}, {10, 1}, {20, 2}, {30, 2}, {40, 3},
+		{50, 3}, {60, 4}, {70, 4}, {80, 5}, {90, 5}, {100, 5},
+	}
+	for _, tt := range tests {
+		got := entity.VASToLegacyOverall(tt.vas)
+		if got != tt.wantLeg {
+			t.Errorf("VASToLegacyOverall(%d) = %d, want %d", tt.vas, got, tt.wantLeg)
+		}
 	}
 }

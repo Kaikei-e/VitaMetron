@@ -68,9 +68,18 @@ func (uc *ImportHealthConnectUseCase) Execute(ctx context.Context, dbPath string
 		result.HRSamples += len(samples)
 	}
 
-	// Batch sleep stages by day
+	// Batch sleep stages by day — skip HC stages if Fitbit data already exists
 	sleepByDay := groupSleepByDay(data.SleepStages)
 	for day, stages := range sleepByDay {
+		if len(stages) > 0 && stages[0].LogID == 0 {
+			// HC stages have LogID 0 — check if Fitbit stages already exist for this range
+			rangeEnd := stages[len(stages)-1].Time.Add(time.Duration(stages[len(stages)-1].Seconds) * time.Second)
+			existing, err := uc.sleepRepo.ListByTimeRange(ctx, stages[0].Time, rangeEnd)
+			if err == nil && hasFitbitStages(existing) {
+				log.Printf("info: skipping HC sleep stages for %s — Fitbit data exists", day)
+				continue
+			}
+		}
 		if err := uc.sleepRepo.BulkUpsert(ctx, stages); err != nil {
 			log.Printf("warn: bulk upsert sleep for %s: %v", day, err)
 			continue
@@ -106,4 +115,13 @@ func groupSleepByDay(stages []entity.SleepStage) map[string][]entity.SleepStage 
 		m[day] = append(m[day], s)
 	}
 	return m
+}
+
+func hasFitbitStages(stages []entity.SleepStage) bool {
+	for _, s := range stages {
+		if s.LogID != 0 {
+			return true
+		}
+	}
+	return false
 }
