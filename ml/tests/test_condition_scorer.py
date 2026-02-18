@@ -29,16 +29,16 @@ def _base_features(**overrides):
 
 class TestRuleBasedScore:
     def test_baseline_returns_moderate_score(self):
-        """Neutral features should give score around 3.0."""
+        """Neutral features should give score around 50."""
         features = _base_features(hrv_delta=0, steps_delta=0)
         score, confidence, factors = rule_based_score(features)
-        assert 2.5 <= score <= 4.0
+        assert 40 <= score <= 80
         assert confidence == 0.4
 
     def test_good_hrv_increases_score(self):
         features = _base_features(hrv_delta=8.0)
         score, _, factors = rule_based_score(features)
-        assert score > 3.0
+        assert score > 50
         hrv_factors = [f for f in factors if f.feature == "hrv"]
         assert len(hrv_factors) == 1
         assert hrv_factors[0].direction == "positive"
@@ -60,7 +60,7 @@ class TestRuleBasedScore:
     def test_poor_sleep_decreases_score(self):
         features = _base_features(sleep_duration_min=240)  # 4 hours
         score, _, _ = rule_based_score(features)
-        assert score < 3.0
+        assert score < 50
 
     def test_low_spo2_decreases_score(self):
         features = _base_features(spo2_avg=91.0)
@@ -77,7 +77,7 @@ class TestRuleBasedScore:
         assert rhr_factors[0].direction == "negative"
 
     def test_score_clamped_min(self):
-        """Score should not go below 1.0."""
+        """Score should not go below 0."""
         features = _base_features(
             hrv_delta=-15.0,
             sleep_duration_min=180,
@@ -87,10 +87,10 @@ class TestRuleBasedScore:
             steps_delta=-8000,
         )
         score, _, _ = rule_based_score(features)
-        assert score >= 1.0
+        assert score >= 0
 
     def test_score_clamped_max(self):
-        """Score should not go above 5.0."""
+        """Score should not go above 100."""
         features = _base_features(
             hrv_delta=20.0,
             sleep_duration_min=510,
@@ -98,12 +98,12 @@ class TestRuleBasedScore:
             steps_delta=5000,
         )
         score, _, _ = rule_based_score(features)
-        assert score <= 5.0
+        assert score <= 100
 
     def test_empty_features_returns_baseline(self):
-        """Empty features should give baseline score 3.0."""
+        """Empty features should give baseline score 50."""
         score, confidence, factors = rule_based_score({})
-        assert score == 3.0
+        assert score == 50.0
         assert confidence == 0.4
         assert factors == []
 
@@ -118,13 +118,13 @@ class TestRuleBasedScore:
             "sleep_deep_min": None,
         }
         score, _, _ = rule_based_score(features)
-        assert score == 3.0
+        assert score == 50.0
 
     def test_factors_sorted_by_importance(self):
         features = _base_features(
-            hrv_delta=-12.0,        # importance=0.5
-            sleep_duration_min=240,  # importance=0.8
-            steps_delta=4000,        # importance=0.2
+            hrv_delta=-12.0,        # importance=10
+            sleep_duration_min=240,  # importance=16
+            steps_delta=4000,        # importance=4
         )
         _, _, factors = rule_based_score(features)
         importances = [f.importance for f in factors]

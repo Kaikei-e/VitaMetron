@@ -48,7 +48,7 @@ async def test_predict_returns_score(client, mock_pool):
     assert "confidence" in data
     assert "contributing_factors" in data
     assert "risk_signals" in data
-    assert 1.0 <= data["predicted_score"] <= 5.0
+    assert 0 <= data["predicted_score"] <= 100
     assert 0.0 <= data["confidence"] <= 1.0
 
 
@@ -59,7 +59,7 @@ async def test_predict_no_data_returns_fallback(client, mock_pool):
     resp = await client.get("/predict?date=2026-02-17")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["predicted_score"] == 3.0
+    assert data["predicted_score"] == 50.0
     assert data["confidence"] == 0.0
     assert data["contributing_factors"] == []
     assert data["risk_signals"] == []
@@ -67,7 +67,7 @@ async def test_predict_no_data_returns_fallback(client, mock_pool):
 
 @pytest.mark.asyncio
 async def test_predict_good_sleep_hrv(client, mock_pool):
-    """Good sleep + high HRV should produce score > 3.0."""
+    """Good sleep + high HRV should produce score > 50."""
     mock_pool.conn.fetchrow.return_value = _make_feature_row(
         sleep_duration_min=480,  # 8 hours
         hrv_delta=8.0,           # above baseline
@@ -76,12 +76,12 @@ async def test_predict_good_sleep_hrv(client, mock_pool):
 
     resp = await client.get("/predict?date=2026-02-17")
     data = resp.json()
-    assert data["predicted_score"] > 3.0
+    assert data["predicted_score"] > 50
 
 
 @pytest.mark.asyncio
 async def test_predict_poor_metrics(client, mock_pool):
-    """Poor sleep + low HRV + elevated RHR should produce score < 3.0."""
+    """Poor sleep + low HRV + elevated RHR should produce score < 50."""
     mock_pool.conn.fetchrow.return_value = _make_feature_row(
         sleep_duration_min=240,  # 4 hours
         hrv_delta=-12.0,         # below baseline
@@ -91,7 +91,7 @@ async def test_predict_poor_metrics(client, mock_pool):
 
     resp = await client.get("/predict?date=2026-02-17")
     data = resp.json()
-    assert data["predicted_score"] < 3.0
+    assert data["predicted_score"] < 50
 
 
 @pytest.mark.asyncio
