@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { apiFetch } from '$lib/api';
-	import ScaleSelector from './ScaleSelector.svelte';
+	import { createCondition } from '$lib/api/conditions';
+	import { todayISO } from '$lib/utils/date';
 	import VASSlider from './VASSlider.svelte';
 	import TagInput from './TagInput.svelte';
 	import Card from '$lib/components/ui/Card.svelte';
@@ -9,17 +9,18 @@
 
 	let { availableTags = [] }: { availableTags?: string[] } = $props();
 
-	let overall = $state<number | null>(null);
-	let mental = $state<number | null>(null);
-	let physical = $state<number | null>(null);
+	let logDate = $state(todayISO());
+	let wellbeing = $state<number | null>(null);
+	let mood = $state<number | null>(null);
 	let energy = $state<number | null>(null);
-	let overallVas = $state<number | null>(null);
+	let sleepQuality = $state<number | null>(null);
+	let stress = $state<number | null>(null);
 	let note = $state('');
 	let tags = $state<string[]>([]);
 	let submitting = $state(false);
 	let error = $state('');
 
-	let isValid = $derived(overall !== null && overall >= 1 && overall <= 5);
+	let isValid = $derived(wellbeing !== null && wellbeing >= 0 && wellbeing <= 100);
 	let noteLength = $derived(note.length);
 	const NOTE_MAX = 1000;
 
@@ -31,20 +32,18 @@
 		submitting = true;
 
 		const body: CreateConditionRequest = {
-			overall: overall!
+			wellbeing: wellbeing!
 		};
-		if (mental !== null) body.mental = mental;
-		if (physical !== null) body.physical = physical;
+		if (mood !== null) body.mood = mood;
 		if (energy !== null) body.energy = energy;
-		if (overallVas !== null) body.overall_vas = overallVas;
+		if (sleepQuality !== null) body.sleep_quality = sleepQuality;
+		if (stress !== null) body.stress = stress;
 		if (note.trim()) body.note = note.trim();
 		if (tags.length > 0) body.tags = tags;
+		body.logged_at = `${logDate}T12:00:00Z`;
 
 		try {
-			await apiFetch('/api/conditions', {
-				method: 'POST',
-				body: JSON.stringify(body)
-			});
+			await createCondition(body);
 			await goto('/conditions');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Failed to save condition.';
@@ -60,12 +59,51 @@
 			<p class="rounded-lg bg-red-100 px-3 py-2 text-sm text-red-700" role="alert">{error}</p>
 		{/if}
 
-		<ScaleSelector label="Overall *" name="overall" bind:value={overall} />
-		<ScaleSelector label="Mental" name="mental" bind:value={mental} />
-		<ScaleSelector label="Physical" name="physical" bind:value={physical} />
-		<ScaleSelector label="Energy" name="energy" bind:value={energy} />
+		<label class="flex flex-col gap-1">
+			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Date</span>
+			<input
+				type="date"
+				class="rounded-lg border border-gray-300 p-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-gray-100"
+				max={todayISO()}
+				bind:value={logDate}
+			/>
+		</label>
 
-		<VASSlider label="How do you feel right now? (0-100)" bind:value={overallVas} />
+		<VASSlider
+			label="Well-being"
+			leftLabel="最悪の状態"
+			rightLabel="最高の状態"
+			required={true}
+			bind:value={wellbeing}
+		/>
+
+		<VASSlider
+			label="Mood"
+			leftLabel="非常に落ち込んでいる"
+			rightLabel="非常に気分が良い"
+			bind:value={mood}
+		/>
+
+		<VASSlider
+			label="Energy"
+			leftLabel="完全に疲労"
+			rightLabel="非常に活力がある"
+			bind:value={energy}
+		/>
+
+		<VASSlider
+			label="Sleep Quality"
+			leftLabel="非常に悪い"
+			rightLabel="非常に良い"
+			bind:value={sleepQuality}
+		/>
+
+		<VASSlider
+			label="Stress"
+			leftLabel="極度のストレス"
+			rightLabel="完全にリラックス"
+			bind:value={stress}
+		/>
 
 		<label class="flex flex-col gap-1">
 			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">Note</span>

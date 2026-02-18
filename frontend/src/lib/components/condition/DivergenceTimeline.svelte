@@ -1,14 +1,11 @@
 <script lang="ts">
 	import LineChart from '$lib/components/charts/LineChart.svelte';
+	import { filterValidDivergences } from '$lib/utils/divergence';
 	import type { DivergenceDetection } from '$lib/types/insights';
 
 	let { detections }: { detections: DivergenceDetection[] } = $props();
 
-	let filtered = $derived(
-		detections.filter(
-			(d) => d.DivergenceType !== 'no_condition_log' && d.DivergenceType !== 'no_biometric_data'
-		)
-	);
+	let filtered = $derived(filterValidDivergences(detections));
 
 	let labels = $derived(filtered.map((d) => d.Date.slice(5)));
 
@@ -37,7 +34,7 @@
 		scales: {
 			y: {
 				min: 0,
-				max: 5,
+				max: 100,
 				title: { display: true, text: 'Score' }
 			}
 		},

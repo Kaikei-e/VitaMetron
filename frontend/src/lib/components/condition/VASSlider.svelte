@@ -1,13 +1,29 @@
 <script lang="ts">
+	import { vasToLabel } from '$lib/utils/condition';
+
 	let {
 		label = 'How do you feel right now? (0-100)',
+		leftLabel = '',
+		rightLabel = '',
+		required = false,
 		value = $bindable<number | null>(null)
 	}: {
 		label?: string;
+		leftLabel?: string;
+		rightLabel?: string;
+		required?: boolean;
 		value?: number | null;
 	} = $props();
 
 	let active = $state(false);
+
+	// Auto-activate for required fields
+	$effect(() => {
+		if (required && !active && value === null) {
+			active = true;
+			value = 50;
+		}
+	});
 
 	function activate() {
 		if (!active) {
@@ -17,6 +33,7 @@
 	}
 
 	function clear() {
+		if (required) return;
 		active = false;
 		value = null;
 	}
@@ -29,19 +46,16 @@
 		return 'text-green-600';
 	});
 
-	let displayLabel = $derived.by(() => {
-		if (value === null) return '';
-		if (value <= 10) return 'Very Poor';
-		if (value <= 30) return 'Poor';
-		if (value <= 50) return 'Fair';
-		if (value <= 70) return 'Good';
-		if (value <= 90) return 'Very Good';
-		return 'Excellent';
-	});
+	let displayLabel = $derived(vasToLabel(value));
+
+	let anchorLeft = $derived(leftLabel || 'Very Poor');
+	let anchorRight = $derived(rightLabel || 'Excellent');
 </script>
 
 <fieldset>
-	<legend class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</legend>
+	<legend class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+		{label}{#if required}<span class="text-red-500 ml-0.5">*</span>{/if}
+	</legend>
 
 	{#if !active}
 		<button
@@ -49,20 +63,22 @@
 			class="w-full rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 px-4 py-3 text-sm text-gray-500 dark:text-gray-400 hover:border-blue-400 hover:text-blue-500 transition-colors"
 			onclick={activate}
 		>
-			Tap to rate on a 0-100 scale (optional)
+			Tap to rate on a 0-100 scale{#if !required} (optional){/if}
 		</button>
 	{:else}
 		<div class="flex flex-col gap-2">
 			<div class="flex items-center justify-between">
 				<span class="text-2xl font-bold {color}">{value}</span>
 				<span class="text-sm text-gray-500 dark:text-gray-400">{displayLabel}</span>
-				<button
-					type="button"
-					class="text-xs text-gray-400 hover:text-red-500 transition-colors"
-					onclick={clear}
-				>
-					Clear
-				</button>
+				{#if !required}
+					<button
+						type="button"
+						class="text-xs text-gray-400 hover:text-red-500 transition-colors"
+						onclick={clear}
+					>
+						Clear
+					</button>
+				{/if}
 			</div>
 
 			<input
@@ -77,9 +93,8 @@
 			/>
 
 			<div class="flex justify-between text-xs text-gray-400 dark:text-gray-500">
-				<span>Very Poor</span>
-				<span>Neutral</span>
-				<span>Excellent</span>
+				<span>{anchorLeft}</span>
+				<span>{anchorRight}</span>
 			</div>
 		</div>
 	{/if}

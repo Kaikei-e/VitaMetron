@@ -1,52 +1,40 @@
 <script lang="ts">
 	import Card from '$lib/components/ui/Card.svelte';
+	import { vasToTextColor, vasToBgColor, vasToLabel } from '$lib/utils/condition';
+	import { formatFullDateTime, formatShortDate } from '$lib/utils/date';
 	import type { ConditionLog } from '$lib/types/condition';
 
 	let {
 		conditions = [],
 		total = 0,
 		page = 1,
-		limit = 20
+		limit = 20,
+		ondelete
 	}: {
 		conditions?: ConditionLog[];
 		total?: number;
 		page?: number;
 		limit?: number;
+		ondelete?: (id: number) => void;
 	} = $props();
+
+	let deleting = $state<number | null>(null);
+
+	async function handleDelete(id: number) {
+		if (!ondelete) return;
+		if (!confirm('Delete this condition log?')) return;
+		deleting = id;
+		try {
+			ondelete(id);
+		} finally {
+			deleting = null;
+		}
+	}
 
 	let totalPages = $derived(Math.max(1, Math.ceil(total / limit)));
 
-	const scoreColor: Record<number, string> = {
-		1: 'text-condition-1',
-		2: 'text-condition-2',
-		3: 'text-condition-3',
-		4: 'text-condition-4',
-		5: 'text-condition-5'
-	};
-
-	const scoreBg: Record<number, string> = {
-		1: 'bg-condition-1',
-		2: 'bg-condition-2',
-		3: 'bg-condition-3',
-		4: 'bg-condition-4',
-		5: 'bg-condition-5'
-	};
-
-	function formatDate(iso: string): string {
-		return new Date(iso).toLocaleDateString('ja-JP', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	function formatShortDate(iso: string): string {
-		return new Date(iso).toLocaleDateString('ja-JP', {
-			month: 'short',
-			day: 'numeric'
-		});
+	function formatVAS(v: number | null): string {
+		return v !== null ? String(v) : '--';
 	}
 </script>
 
@@ -61,21 +49,24 @@
 			<thead>
 				<tr class="border-b border-gray-200 text-left text-gray-500 dark:border-gray-700 dark:text-gray-400">
 					<th class="px-4 py-3 font-medium">Date</th>
-					<th class="px-4 py-3 font-medium">Overall</th>
-					<th class="px-4 py-3 font-medium">Mental</th>
-					<th class="px-4 py-3 font-medium">Physical</th>
+					<th class="px-4 py-3 font-medium">Well-being</th>
+					<th class="px-4 py-3 font-medium">Mood</th>
 					<th class="px-4 py-3 font-medium">Energy</th>
+					<th class="px-4 py-3 font-medium">Sleep</th>
+					<th class="px-4 py-3 font-medium">Stress</th>
 					<th class="px-4 py-3 font-medium">Tags</th>
+					{#if ondelete}<th class="px-4 py-3 font-medium w-16"></th>{/if}
 				</tr>
 			</thead>
 			<tbody>
 				{#each conditions as cond, i}
 					<tr class="border-b border-gray-100 dark:border-gray-800 {i % 2 === 1 ? 'bg-gray-50 dark:bg-gray-800/50' : ''}">
-						<td class="px-4 py-3">{formatDate(cond.LoggedAt)}</td>
-						<td class="px-4 py-3 font-bold {scoreColor[cond.Overall] ?? ''}">{cond.Overall}</td>
-						<td class="px-4 py-3">{cond.Mental ?? '--'}</td>
-						<td class="px-4 py-3">{cond.Physical ?? '--'}</td>
-						<td class="px-4 py-3">{cond.Energy ?? '--'}</td>
+						<td class="px-4 py-3">{formatFullDateTime(cond.LoggedAt)}</td>
+						<td class="px-4 py-3 font-bold {vasToTextColor(cond.OverallVAS)}">{cond.OverallVAS}</td>
+						<td class="px-4 py-3 {vasToTextColor(cond.MoodVAS)}">{formatVAS(cond.MoodVAS)}</td>
+						<td class="px-4 py-3 {vasToTextColor(cond.EnergyVAS)}">{formatVAS(cond.EnergyVAS)}</td>
+						<td class="px-4 py-3 {vasToTextColor(cond.SleepQualityVAS)}">{formatVAS(cond.SleepQualityVAS)}</td>
+						<td class="px-4 py-3 {vasToTextColor(cond.StressVAS)}">{formatVAS(cond.StressVAS)}</td>
 						<td class="px-4 py-3">
 							<div class="flex flex-wrap gap-1">
 								{#each cond.Tags ?? [] as tag}
@@ -83,6 +74,22 @@
 								{/each}
 							</div>
 						</td>
+						{#if ondelete}
+							<td class="px-4 py-3">
+								<button
+									onclick={() => handleDelete(cond.ID)}
+									disabled={deleting === cond.ID}
+									class="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+									title="Delete"
+								>
+									{#if deleting === cond.ID}
+										<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" class="opacity-75"/></svg>
+									{:else}
+										<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+									{/if}
+								</button>
+							</td>
+						{/if}
 					</tr>
 				{/each}
 			</tbody>
@@ -94,15 +101,32 @@
 			<Card>
 				<div class="flex items-center justify-between">
 					<span class="text-sm text-gray-500">{formatShortDate(cond.LoggedAt)}</span>
-					<span class="flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white {scoreBg[cond.Overall] ?? 'bg-gray-400'}">
-						{cond.Overall}
-					</span>
+					<div class="flex items-center gap-2">
+						<span class="flex h-8 min-w-8 items-center justify-center rounded-full px-2 text-sm font-bold text-white {vasToBgColor(cond.OverallVAS)}">
+							{cond.OverallVAS}
+						</span>
+						{#if ondelete}
+							<button
+								onclick={() => handleDelete(cond.ID)}
+								disabled={deleting === cond.ID}
+								class="rounded p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+								title="Delete"
+							>
+								{#if deleting === cond.ID}
+									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"/><path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="4" stroke-linecap="round" class="opacity-75"/></svg>
+								{:else}
+									<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+								{/if}
+							</button>
+						{/if}
+					</div>
 				</div>
-				{#if cond.Mental !== null || cond.Physical !== null || cond.Energy !== null}
-					<div class="mt-2 flex gap-3 text-xs text-gray-500">
-						{#if cond.Mental !== null}<span>Mental: {cond.Mental}</span>{/if}
-						{#if cond.Physical !== null}<span>Physical: {cond.Physical}</span>{/if}
-						{#if cond.Energy !== null}<span>Energy: {cond.Energy}</span>{/if}
+				{#if cond.MoodVAS !== null || cond.EnergyVAS !== null || cond.SleepQualityVAS !== null || cond.StressVAS !== null}
+					<div class="mt-2 flex flex-wrap gap-3 text-xs text-gray-500">
+						{#if cond.MoodVAS !== null}<span>Mood: <span class="{vasToTextColor(cond.MoodVAS)} font-medium">{cond.MoodVAS}</span></span>{/if}
+						{#if cond.EnergyVAS !== null}<span>Energy: <span class="{vasToTextColor(cond.EnergyVAS)} font-medium">{cond.EnergyVAS}</span></span>{/if}
+						{#if cond.SleepQualityVAS !== null}<span>Sleep: <span class="{vasToTextColor(cond.SleepQualityVAS)} font-medium">{cond.SleepQualityVAS}</span></span>{/if}
+						{#if cond.StressVAS !== null}<span>Stress: <span class="{vasToTextColor(cond.StressVAS)} font-medium">{cond.StressVAS}</span></span>{/if}
 					</div>
 				{/if}
 				{#if cond.Tags?.length}
