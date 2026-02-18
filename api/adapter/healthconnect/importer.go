@@ -78,35 +78,64 @@ func priorityPick[T any](m map[int]T) (T, bool) {
 	return zero, false
 }
 
+// plausiblePick returns the Fitbit value if it's within a plausible range,
+// otherwise falls back to Nothing X if plausible. If both are implausible,
+// returns Fitbit (maintaining original priority). When only one source exists
+// it is returned without a plausibility check.
+func plausiblePick[T any](m map[int]T, isPlausible func(T) bool) (T, bool) {
+	fitbit, hasFitbit := m[appFitbit]
+	nothing, hasNothing := m[appNothingX]
+	switch {
+	case hasFitbit && hasNothing:
+		if isPlausible(fitbit) {
+			return fitbit, true
+		}
+		if isPlausible(nothing) {
+			return nothing, true
+		}
+		return fitbit, true
+	case hasFitbit:
+		return fitbit, true
+	case hasNothing:
+		return nothing, true
+	default:
+		var zero T
+		return zero, false
+	}
+}
+
 // extractSummaries builds per-day DailySummary by querying each metric table
 // with app_info_id filtering and applying Fitbit > Nothing X priority.
 func (imp *Importer) extractSummaries(db *sql.DB) ([]entity.DailySummary, error) {
 	dates := make(map[string]*entity.DailySummary)
 	now := time.Now()
 
-	// Steps (Fitbit priority)
+	// Steps (Fitbit priority, plausibility check)
 	if err := imp.queryDailyInt(db, `
 		SELECT date(start_time/1000,'unixepoch','+9 hours') AS day, app_info_id, SUM(count)
 		FROM steps_record_table WHERE app_info_id IN (3,5)
 		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v int) { s.Steps = v },
+		func(v int) bool { return v > 0 && v <= entity.StepsMax },
 	); err != nil {
 		log.Printf("warn: steps query: %v", err)
 	}
 
-	// Distance (Fitbit priority, meters → km)
+	// Distance (Fitbit priority, meters → km, plausibility check on raw meters)
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(start_time/1000,'unixepoch','+9 hours') AS day, app_info_id, SUM(distance)
 		FROM distance_record_table WHERE app_info_id IN (3,5)
 		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.DistanceKM = float32(v / 1000) },
+		func(v float64) bool { return v > 0 && v <= float64(entity.DistanceKMMax)*1000 },
 	); err != nil {
 		log.Printf("warn: distance query: %v", err)
 	}
 
-	// Calories (Fitbit priority, small cal → kcal)
+	// Calories (Fitbit priority, small cal → kcal, plausibility check on raw cal)
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(start_time/1000,'unixepoch','+9 hours') AS day, app_info_id, SUM(energy)
 		FROM total_calories_burned_record_table WHERE app_info_id IN (3,5)
 		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.CaloriesTotal = int(v / 1000) },
+		func(v float64) bool { return v > 0 && v <= float64(entity.CaloriesTotalMax)*1000 },
 	); err != nil {
 		log.Printf("warn: calories query: %v", err)
 	}
@@ -116,11 +145,12 @@ func (imp *Importer) extractSummaries(db *sql.DB) ([]entity.DailySummary, error)
 		log.Printf("warn: avg/max HR query: %v", err)
 	}
 
-	// RestingHR (Nothing X only)
+	// RestingHR (plausibility check)
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(time/1000,'unixepoch','+9 hours') AS day, app_info_id, AVG(beats_per_minute)
 		FROM resting_heart_rate_record_table WHERE app_info_id IN (3,5)
 		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.RestingHR = int(v) },
+		func(v float64) bool { return v >= float64(entity.RestingHRMin) && v <= float64(entity.RestingHRMax) },
 	); err != nil {
 		log.Printf("warn: resting HR query: %v", err)
 	}
@@ -130,22 +160,24 @@ func (imp *Importer) extractSummaries(db *sql.DB) ([]entity.DailySummary, error)
 		log.Printf("warn: SpO2 query: %v", err)
 	}
 
-	// HRV (Fitbit only)
+	// HRV (plausibility check)
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(time/1000,'unixepoch','+9 hours') AS day, app_info_id, AVG(heart_rate_variability_millis)
 		FROM heart_rate_variability_rmssd_record_table WHERE app_info_id IN (3,5)
 		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.HRVDailyRMSSD = float32(v) },
+		func(v float64) bool { return v >= float64(entity.RMSSDMin) && v <= float64(entity.RMSSDMax) },
 	); err != nil {
 		log.Printf("warn: HRV query: %v", err)
 	}
 
-	// SkinTemp (Fitbit only) — join delta child table with parent record table
+	// SkinTemp (plausibility check) — join delta child table with parent record table
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(d.epoch_millis/1000,'unixepoch','+9 hours') AS day, s.app_info_id, AVG(d.delta)
 		FROM skin_temperature_delta_table d
 		JOIN skin_temperature_record_table s ON d.parent_key = s.row_id
 		WHERE s.app_info_id IN (3,5)
 		GROUP BY day, s.app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.SkinTempVariation = float32(v) },
+		func(v float64) bool { return v >= float64(entity.SkinTempDeltaMin) && v <= float64(entity.SkinTempDeltaMax) },
 	); err != nil {
 		log.Printf("warn: skin temp query: %v", err)
 	}
@@ -179,7 +211,10 @@ func (imp *Importer) ensureDate(dates map[string]*entity.DailySummary, day strin
 }
 
 // queryDailyInt queries for day, app_info_id, int_value and applies priority merge.
-func (imp *Importer) queryDailyInt(db *sql.DB, query string, dates map[string]*entity.DailySummary, setter func(*entity.DailySummary, int)) error {
+// If check is non-nil, plausiblePick is used instead of priorityPick so that an
+// implausible Fitbit value can be replaced by a plausible Nothing X value.
+func (imp *Importer) queryDailyInt(db *sql.DB, query string, dates map[string]*entity.DailySummary,
+	setter func(*entity.DailySummary, int), check func(int) bool) error {
 	rows, err := db.Query(query)
 	if err != nil {
 		return err
@@ -203,7 +238,14 @@ func (imp *Importer) queryDailyInt(db *sql.DB, query string, dates map[string]*e
 	}
 
 	for day, apps := range dayMap {
-		if v, ok := priorityPick(apps); ok {
+		var v int
+		var ok bool
+		if check != nil {
+			v, ok = plausiblePick(apps, check)
+		} else {
+			v, ok = priorityPick(apps)
+		}
+		if ok {
 			setter(imp.ensureDate(dates, day), v)
 		}
 	}
@@ -211,7 +253,10 @@ func (imp *Importer) queryDailyInt(db *sql.DB, query string, dates map[string]*e
 }
 
 // queryDailyFloat queries for day, app_info_id, float_value and applies priority merge.
-func (imp *Importer) queryDailyFloat(db *sql.DB, query string, dates map[string]*entity.DailySummary, setter func(*entity.DailySummary, float64)) error {
+// If check is non-nil, plausiblePick is used instead of priorityPick so that an
+// implausible Fitbit value can be replaced by a plausible Nothing X value.
+func (imp *Importer) queryDailyFloat(db *sql.DB, query string, dates map[string]*entity.DailySummary,
+	setter func(*entity.DailySummary, float64), check func(float64) bool) error {
 	rows, err := db.Query(query)
 	if err != nil {
 		return err
@@ -236,7 +281,14 @@ func (imp *Importer) queryDailyFloat(db *sql.DB, query string, dates map[string]
 	}
 
 	for day, apps := range dayMap {
-		if v, ok := priorityPick(apps); ok {
+		var v float64
+		var ok bool
+		if check != nil {
+			v, ok = plausiblePick(apps, check)
+		} else {
+			v, ok = priorityPick(apps)
+		}
+		if ok {
 			setter(imp.ensureDate(dates, day), v)
 		}
 	}
@@ -284,7 +336,10 @@ func (imp *Importer) queryDailyHR(db *sql.DB, dates map[string]*entity.DailySumm
 	}
 
 	for day, apps := range dayMap {
-		if v, ok := priorityPick(apps); ok {
+		v, ok := plausiblePick(apps, func(d hrData) bool {
+			return d.avg >= float64(entity.AvgHRMin) && d.avg <= float64(entity.AvgHRMax)
+		})
+		if ok {
 			s := imp.ensureDate(dates, day)
 			s.AvgHR = float32(v.avg)
 			s.MaxHR = v.max
@@ -327,7 +382,10 @@ func (imp *Importer) queryDailySpO2(db *sql.DB, dates map[string]*entity.DailySu
 	}
 
 	for day, apps := range dayMap {
-		if v, ok := priorityPick(apps); ok {
+		v, ok := plausiblePick(apps, func(d spo2Data) bool {
+			return d.avg >= float64(entity.SpO2Min) && d.avg <= float64(entity.SpO2Max)
+		})
+		if ok {
 			s := imp.ensureDate(dates, day)
 			s.SpO2Avg = float32(v.avg)
 			s.SpO2Min = float32(v.min)

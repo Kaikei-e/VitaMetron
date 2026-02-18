@@ -69,15 +69,16 @@ func (c *Client) PredictCondition(ctx context.Context, date time.Time) (*entity.
 }
 
 type vriResponse struct {
-	Date               string             `json:"date"`
-	VRIScore           float64            `json:"vri_score"`
-	VRIConfidence      float64            `json:"vri_confidence"`
-	SRIValue           *float64           `json:"sri_value"`
-	SRIDaysUsed        int                `json:"sri_days_used"`
-	ZScores            map[string]*float64 `json:"z_scores"`
-	BaselineWindowDays int                `json:"baseline_window_days"`
-	BaselineMaturity   string             `json:"baseline_maturity"`
-	MetricsIncluded    []string           `json:"metrics_included"`
+	Date                string              `json:"date"`
+	VRIScore            float64             `json:"vri_score"`
+	VRIConfidence       float64             `json:"vri_confidence"`
+	SRIValue            *float64            `json:"sri_value"`
+	SRIDaysUsed         int                 `json:"sri_days_used"`
+	ZScores             map[string]*float64 `json:"z_scores"`
+	ContributingFactors json.RawMessage     `json:"contributing_factors"`
+	BaselineWindowDays  int                 `json:"baseline_window_days"`
+	BaselineMaturity    string              `json:"baseline_maturity"`
+	MetricsIncluded     []string            `json:"metrics_included"`
 }
 
 func (c *Client) GetVRI(ctx context.Context, date time.Time) (*entity.VRIScore, error) {
@@ -136,13 +137,15 @@ func (c *Client) GetVRIRange(ctx context.Context, from, to time.Time) ([]entity.
 
 func vriResponseToEntity(vr vriResponse, fallbackDate time.Time) *entity.VRIScore {
 	s := &entity.VRIScore{
-		Date:               fallbackDate,
-		VRIScore:           float32(vr.VRIScore),
-		VRIConfidence:      float32(vr.VRIConfidence),
-		SRIDaysUsed:        vr.SRIDaysUsed,
-		BaselineWindowDays: vr.BaselineWindowDays,
-		MetricsIncluded:    vr.MetricsIncluded,
-		ComputedAt:         time.Now(),
+		Date:                fallbackDate,
+		VRIScore:            float32(vr.VRIScore),
+		VRIConfidence:       float32(vr.VRIConfidence),
+		SRIDaysUsed:         vr.SRIDaysUsed,
+		BaselineWindowDays:  vr.BaselineWindowDays,
+		BaselineMaturity:    vr.BaselineMaturity,
+		ContributingFactors: vr.ContributingFactors,
+		MetricsIncluded:     vr.MetricsIncluded,
+		ComputedAt:          time.Now(),
 	}
 
 	if vr.SRIValue != nil {
