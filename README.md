@@ -27,6 +27,8 @@ The system is designed as an **N-of-1 personal model** — all ML models are tra
 - **Subjective-Objective Divergence** — Ridge regression + CuSum detects persistent gaps between how you feel and what your biometrics show
 - **Data Quality Scoring** — Every metric comes with confidence estimates integrating wear time, sensor coverage, and baseline maturity
 - **Multi-Source Import** — Fitbit (auto-sync), Health Connect (SQLite export), Apple Watch/HealthKit (ZIP upload with chunked transfer)
+- **Daily Health Advice** — Local LLM (Ollama/Gemma3) generates personalized daily health guidance from VRI, anomalies, and biometric trends. Runs entirely on-device, no cloud API calls
+- **WHO-5 Well-Being Index** — Standardized 5-item well-being questionnaire (0–100% scale) for structured self-assessment alongside free-form condition logs
 - **Full-Stack Dashboard** — SvelteKit 2 frontend with real-time metrics, intraday charts, 7-day trends, and ML insight visualization
 
 ## Architecture
@@ -43,6 +45,7 @@ graph LR
         API --> Postgres[("PostgreSQL<br/>TimescaleDB :5432")]
         API --> Redis[("Redis :6379")]
         ML --> Postgres
+        ML --> Ollama["Ollama<br/>Gemma3 :11434"]
         Preprocessor --> Postgres
         Preprocessor --> Redis
         Frontend -->|"SSR"| API
@@ -51,12 +54,13 @@ graph LR
 
 | Service | Tech | Role |
 |---------|------|------|
-| **Frontend** | SvelteKit 2, Svelte 5 (Runes), Tailwind CSS 4, Chart.js | Dashboard UI — 7 pages, 49 components |
+| **Frontend** | SvelteKit 2, Svelte 5 (Runes), Tailwind CSS 4, Chart.js | Dashboard UI — 7 pages, 55 components |
 | **API** | Go 1.24, Echo v4, pgx/v5, go-redis/v9 | REST API, Fitbit OAuth (PKCE), data sync, ML proxy |
 | **ML** | Python 3.12, FastAPI, scikit-learn, XGBoost, PyTorch, SHAP, Optuna | VRI scoring, anomaly detection, HRV prediction, divergence detection |
 | **Preprocessor** | Python 3.12, FastAPI | Apple Watch/HealthKit data parsing and normalization |
 | **PostgreSQL** | TimescaleDB (PG 18) | Time-series storage with hypertables |
 | **Redis** | Redis 7 Alpine | OAuth state (PKCE), upload session tracking, job status |
+| **Ollama** | ollama/ollama (Gemma3 4B) | Local LLM for personalized daily advice |
 | **Nginx** | Nginx 1.27 Alpine | Reverse proxy, rate limiting, security headers |
 
 ## Getting Started
@@ -104,9 +108,10 @@ export ORIGIN=https://vitametron.your-domain.com
 ```bash
 make build    # build all service images
 make up       # start all services (detached)
+make ollama-pull   # download Gemma3 4B model (~3 GB)
 ```
 
-All 7 services start in dependency order with health checks. Database migrations run automatically on API startup.
+All 8 services start in dependency order with health checks. Database migrations run automatically on API startup.
 
 ### 5. Verify
 
@@ -172,14 +177,14 @@ VitaMetron/
 │       └── healthkit/          #   Parser, normalizer, sleep builder, aggregator, writer
 ├── frontend/                   # SvelteKit frontend
 │   └── src/
-│       ├── routes/             #   7 pages (dashboard, biometrics, conditions, insights, settings)
+│       ├── routes/             #   7 pages (dashboard, biometrics, conditions, who5, insights, settings)
 │       └── lib/
-│           ├── components/     #   49 Svelte 5 components (ui, dashboard, charts, ...)
+│           ├── components/     #   55 Svelte 5 components across 9 categories
 │           ├── api.ts          #   Browser-side fetch client
 │           ├── server/api.ts   #   SSR fetch client (Docker-internal)
 │           └── types/          #   TypeScript type definitions
 ├── nginx/nginx.conf            # Reverse proxy configuration
-├── docker-compose.yml          # 7-service orchestration
+├── docker-compose.yml          # 8-service orchestration (includes Ollama)
 ├── docker-compose.gpu.yml      # GPU override for ML service
 ├── Makefile                    # Common commands
 └── secrets/                    # Docker secrets (gitignored)
@@ -196,6 +201,7 @@ make build           # docker compose build
 make logs            # docker compose logs -f
 make ps              # docker compose ps
 make health          # check PostgreSQL + Redis health
+make ollama-pull     # download Gemma3 4B model (~3 GB)
 ```
 
 ### Go API
@@ -267,6 +273,7 @@ Migration files live in `api/infrastructure/database/migrations/*.sql`. Each fil
 | Anomaly detection | Isolation Forest (1–3%) | Unsupervised; linear scaling; no labels needed |
 | Explainability | TreeSHAP | Per-feature contribution to every score and anomaly |
 | Architecture | Hexagonal (ports & adapters) | Biometrics provider is swappable (Fitbit / Health Connect / HealthKit) |
+| Local LLM | Ollama + Gemma3 4B | Privacy-first; no cloud dependency; GPU-accelerated when available |
 | Auth model | Cloudflare Tunnel | Single-user app; no in-app authentication needed |
 | Token storage | AES-256-GCM encrypted | OAuth tokens encrypted at rest via Docker Secrets key |
 | Time-series DB | TimescaleDB hypertables | Efficient range queries on HR intraday, sleep stages, daily summaries |
@@ -334,6 +341,20 @@ The Go API exposes 30+ endpoints under `/api/`. All ML-powered endpoints proxy t
 | `DELETE` | `/api/conditions/:id` | Delete a condition log |
 | `GET` | `/api/conditions/tags` | List all tags with counts |
 | `GET` | `/api/conditions/summary` | Condition statistics (avg, min, max) |
+
+### Daily Advice
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/advice` | Get today's LLM-generated health advice |
+| `POST` | `/api/advice/regenerate` | Regenerate today's advice |
+
+### WHO-5 Well-Being
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/who5` | Record a WHO-5 assessment |
+| `GET` | `/api/who5` | List WHO-5 assessments |
+| `GET` | `/api/who5/latest` | Get the latest WHO-5 assessment |
+| `GET` | `/api/who5/:id` | Get a WHO-5 assessment by ID |
 
 ### ML Insights
 | Method | Path | Description |
