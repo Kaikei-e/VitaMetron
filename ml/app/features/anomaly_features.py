@@ -13,7 +13,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Ordered feature list (~20 dimensions)
+# Ordered feature list (~21 dimensions)
 ANOMALY_FEATURE_NAMES: list[str] = [
     # Current day metrics
     "resting_hr",
@@ -24,6 +24,9 @@ ANOMALY_FEATURE_NAMES: list[str] = [
     "br_full_sleep",
     "steps",
     "skin_temp_variation",
+    # Deep sleep HRV features
+    "hrv_deep_ln_rmssd",
+    "hrv_deep_daily_ratio",
     # 7-day rolling deltas
     "resting_hr_delta",
     "hrv_delta",
@@ -75,6 +78,10 @@ SELECT
     ds.br_full_sleep,
     ds.steps,
     ds.skin_temp_variation,
+    CASE WHEN ds.hrv_deep_rmssd > 0 THEN ln(ds.hrv_deep_rmssd) ELSE NULL END AS hrv_deep_ln_rmssd,
+    CASE WHEN ds.hrv_deep_rmssd > 0 AND ds.hrv_daily_rmssd > 0
+         THEN ds.hrv_deep_rmssd / ds.hrv_daily_rmssd
+         ELSE NULL END                    AS hrv_deep_daily_ratio,
     ds.resting_hr - a.rhr_7d             AS resting_hr_delta,
     CASE WHEN ds.hrv_daily_rmssd > 0 AND a.hrv_7d > 0
          THEN ln(ds.hrv_daily_rmssd) - ln(a.hrv_7d)
@@ -108,6 +115,7 @@ WITH daily_data AS (
         date,
         resting_hr,
         hrv_daily_rmssd,
+        hrv_deep_rmssd,
         CASE WHEN hrv_daily_rmssd > 0 THEN ln(hrv_daily_rmssd) ELSE NULL END AS hrv_ln_rmssd,
         sleep_duration_min,
         sleep_deep_min,
@@ -143,6 +151,10 @@ SELECT
     d.br_full_sleep,
     d.steps,
     d.skin_temp_variation,
+    CASE WHEN d.hrv_deep_rmssd > 0 THEN ln(d.hrv_deep_rmssd) ELSE NULL END AS hrv_deep_ln_rmssd,
+    CASE WHEN d.hrv_deep_rmssd > 0 AND d.hrv_daily_rmssd > 0
+         THEN d.hrv_deep_rmssd / d.hrv_daily_rmssd
+         ELSE NULL END                   AS hrv_deep_daily_ratio,
     d.resting_hr - d.rhr_7d              AS resting_hr_delta,
     CASE WHEN d.hrv_daily_rmssd > 0 AND d.hrv_7d > 0
          THEN ln(d.hrv_daily_rmssd) - ln(d.hrv_7d)

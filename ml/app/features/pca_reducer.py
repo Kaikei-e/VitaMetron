@@ -1,6 +1,6 @@
 """Group-wise PCA dimensionality reduction for HRV features.
 
-Reduces 26 features to ~20 principal components via domain-grouped PCA,
+Reduces 29 features to ~21 principal components via domain-grouped PCA,
 with 3-5 PCs per group targeting 90% explained variance.
 """
 
@@ -26,6 +26,9 @@ FEATURE_GROUPS: dict[str, list[str]] = {
     ],
     "hrv": [
         "hrv_ln_rmssd",
+        "hrv_deep_ln_rmssd",
+        "hrv_deep_daily_ratio",
+        "hrv_deep_delta",
         "hrv_delta",
         "hrv_3d_std",
         "hrv_change_rate",
@@ -56,7 +59,7 @@ FEATURE_GROUPS: dict[str, list[str]] = {
 # Maximum PCs per group (caps to ensure we don't overfit small groups)
 MAX_PCS_PER_GROUP: dict[str, int] = {
     "sleep": 4,
-    "hrv": 3,
+    "hrv": 4,
     "heart_rate": 3,
     "activity": 3,
     "other": 3,

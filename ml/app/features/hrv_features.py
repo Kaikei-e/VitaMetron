@@ -13,7 +13,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# Ordered feature list (~25 dimensions)
+# Ordered feature list (~28 dimensions)
 HRV_FEATURE_NAMES: list[str] = [
     # Current day metrics
     "resting_hr",
@@ -27,6 +27,10 @@ HRV_FEATURE_NAMES: list[str] = [
     "calories_active",
     "active_zone_min",
     "skin_temp_variation",
+    # Deep sleep HRV features
+    "hrv_deep_ln_rmssd",
+    "hrv_deep_daily_ratio",
+    "hrv_deep_delta",
     # 7-day rolling deltas (vs 7d avg)
     "resting_hr_delta",
     "hrv_delta",
@@ -57,7 +61,8 @@ WITH avg_7d AS (
         avg(hrv_daily_rmssd)    AS hrv_7d,
         avg(sleep_duration_min) AS sleep_7d,
         avg(steps)              AS steps_7d,
-        avg(spo2_avg)           AS spo2_7d
+        avg(spo2_avg)           AS spo2_7d,
+        avg(CASE WHEN hrv_deep_rmssd > 0 THEN ln(hrv_deep_rmssd) END) AS hrv_deep_ln_7d
     FROM daily_summaries
     WHERE date BETWEEN $1::date - INTERVAL '7 days' AND $1::date - INTERVAL '1 day'
 ),
@@ -118,6 +123,13 @@ SELECT
     ds.calories_active,
     ds.active_zone_min,
     ds.skin_temp_variation,
+    CASE WHEN ds.hrv_deep_rmssd > 0 THEN ln(ds.hrv_deep_rmssd) ELSE NULL END AS hrv_deep_ln_rmssd,
+    CASE WHEN ds.hrv_deep_rmssd > 0 AND ds.hrv_daily_rmssd > 0
+         THEN ds.hrv_deep_rmssd / ds.hrv_daily_rmssd
+         ELSE NULL END                   AS hrv_deep_daily_ratio,
+    CASE WHEN ds.hrv_deep_rmssd > 0 AND a.hrv_deep_ln_7d IS NOT NULL
+         THEN ln(ds.hrv_deep_rmssd) - a.hrv_deep_ln_7d
+         ELSE NULL END                   AS hrv_deep_delta,
     ds.resting_hr - a.rhr_7d             AS resting_hr_delta,
     CASE WHEN ds.hrv_daily_rmssd > 0 AND a.hrv_7d > 0
          THEN ln(ds.hrv_daily_rmssd) - ln(a.hrv_7d)
@@ -162,7 +174,9 @@ WITH daily_data AS (
         date,
         resting_hr,
         hrv_daily_rmssd,
+        hrv_deep_rmssd,
         CASE WHEN hrv_daily_rmssd > 0 THEN ln(hrv_daily_rmssd) ELSE NULL END AS hrv_ln_rmssd,
+        CASE WHEN hrv_deep_rmssd > 0 THEN ln(hrv_deep_rmssd) ELSE NULL END AS hrv_deep_ln_rmssd,
         sleep_duration_min,
         sleep_deep_min,
         sleep_rem_min,
@@ -178,6 +192,7 @@ WITH daily_data AS (
         avg(sleep_duration_min) OVER w7 AS sleep_7d,
         avg(steps)              OVER w7 AS steps_7d,
         avg(spo2_avg)           OVER w7 AS spo2_7d,
+        avg(CASE WHEN hrv_deep_rmssd > 0 THEN ln(hrv_deep_rmssd) END) OVER w7 AS hrv_deep_ln_7d,
         -- 3-day rolling stddev
         stddev_pop(resting_hr)         OVER w3 AS rhr_3d_std,
         stddev_pop(hrv_daily_rmssd)    OVER w3 AS hrv_3d_std,
@@ -218,6 +233,13 @@ SELECT
     d.calories_active,
     d.active_zone_min,
     d.skin_temp_variation,
+    d.hrv_deep_ln_rmssd,
+    CASE WHEN d.hrv_deep_rmssd > 0 AND d.hrv_daily_rmssd > 0
+         THEN d.hrv_deep_rmssd / d.hrv_daily_rmssd
+         ELSE NULL END                   AS hrv_deep_daily_ratio,
+    CASE WHEN d.hrv_deep_ln_rmssd IS NOT NULL AND d.hrv_deep_ln_7d IS NOT NULL
+         THEN d.hrv_deep_ln_rmssd - d.hrv_deep_ln_7d
+         ELSE NULL END                   AS hrv_deep_delta,
     d.resting_hr - d.rhr_7d              AS resting_hr_delta,
     CASE WHEN d.hrv_daily_rmssd > 0 AND d.hrv_7d > 0
          THEN ln(d.hrv_daily_rmssd) - ln(d.hrv_7d)
@@ -377,7 +399,7 @@ async def extract_hrv_sequence_features(
         lookback_days: Number of past days in the sequence.
 
     Returns:
-        (lookback_days, 26) array, or None if any day is missing.
+        (lookback_days, n_features) array, or None if any day is missing.
     """
     sequence = []
     for offset in range(lookback_days, 0, -1):

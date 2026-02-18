@@ -41,10 +41,7 @@ TRAINING_PAIRS_QUERY = """
 SELECT
     ds.date,
     cl.id AS condition_log_id,
-    CASE
-        WHEN cl.overall_vas IS NOT NULL THEN cl.overall_vas / 20.0
-        ELSE cl.overall::real
-    END AS target_score,
+    cl.overall_vas::float AS target_score,
     ds.resting_hr,
     CASE WHEN ds.hrv_daily_rmssd > 0 THEN ln(ds.hrv_daily_rmssd) ELSE NULL END AS hrv_ln_rmssd,
     ds.sleep_duration_min,
