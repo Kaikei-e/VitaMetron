@@ -10,7 +10,7 @@ from app.features.quality import get_day_quality
 from app.features.sri import compute_sri
 from app.features.zscore import compute_rolling_baseline
 from app.models.vri_scorer import baseline_maturity_label, compute_vri
-from app.schemas.vri import VRIResponse
+from app.schemas.vri import VRIMetricContribution, VRIResponse
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,37 @@ ON CONFLICT (date) DO UPDATE SET
 """
 
 
+def _factors_from_z_scores(
+    z_scores: dict[str, float | None],
+) -> list[VRIMetricContribution]:
+    """Reconstruct contributing factors from cached z_scores."""
+    # z_key -> (metric_name, direction)  — must match vri_scorer.METRICS
+    _directions: dict[str, tuple[str, int]] = {
+        "z_ln_rmssd": ("ln_rmssd", 1),
+        "z_resting_hr": ("resting_hr", -1),
+        "z_sleep_duration": ("sleep_duration", 1),
+        "z_sri": ("sri", 1),
+        "z_spo2": ("spo2", 1),
+        "z_deep_sleep": ("deep_sleep", 1),
+        "z_br": ("br", -1),
+    }
+    factors: list[VRIMetricContribution] = []
+    for z_key, (metric, direction) in _directions.items():
+        z = z_scores.get(z_key)
+        if z is None:
+            continue
+        directed_z = z * direction
+        factors.append(VRIMetricContribution(
+            metric=metric,
+            z_score=round(z, 3),
+            directed_z=round(directed_z, 3),
+            direction="positive" if directed_z > 0 else "negative",
+            contribution=round(abs(directed_z), 3),
+        ))
+    factors.sort(key=lambda f: f.contribution, reverse=True)
+    return factors
+
+
 def _row_to_response(row) -> VRIResponse:
     z_scores = {
         "z_ln_rmssd": row["z_ln_rmssd"],
@@ -91,6 +122,7 @@ def _row_to_response(row) -> VRIResponse:
         sri_value=row["sri_value"],
         sri_days_used=row["sri_days_used"] or 0,
         z_scores=z_scores,
+        contributing_factors=_factors_from_z_scores(z_scores),
         baseline_window_days=row["baseline_window_days"] or 0,
         metrics_included=row["metrics_included"] or [],
     )

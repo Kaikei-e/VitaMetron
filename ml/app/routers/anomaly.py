@@ -253,9 +253,14 @@ async def train_anomaly_model(
     if body is None:
         body = AnomalyTrainRequest()
 
-    # Default date range: last 180 days
+    # Default date range: all available data
     end_date = body.end_date or datetime.date.today()
-    start_date = body.start_date or (end_date - datetime.timedelta(days=180))
+    if body.start_date:
+        start_date = body.start_date
+    else:
+        async with pool.acquire() as conn:
+            earliest = await conn.fetchval("SELECT MIN(date) FROM daily_summaries")
+        start_date = earliest or (end_date - datetime.timedelta(days=180))
 
     # Extract training matrix
     X, feature_names, valid_dates = await extract_anomaly_training_matrix(

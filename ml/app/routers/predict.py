@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FALLBACK_RESPONSE = PredictionResponse(
-    predicted_score=3.0,
+    predicted_score=50.0,
     confidence=0.0,
     contributing_factors=[],
     risk_signals=[],

@@ -45,9 +45,7 @@ ORDER BY date ASC
 
 FETCH_CONDITION_FOR_DATE_QUERY = """
 SELECT id,
-       CASE WHEN overall_vas IS NOT NULL THEN overall_vas / 20.0
-            ELSE overall::real
-       END AS score
+       overall_vas::float AS score
 FROM condition_logs
 WHERE logged_at::date = $1::date
 ORDER BY logged_at DESC
@@ -213,7 +211,7 @@ async def _detect_single(
         )
     else:
         # Initial phase: simple threshold
-        if abs(residual) > 1.0:
+        if abs(residual) > 20.0:
             divergence_type = (
                 "feeling_better_than_expected" if residual > 0
                 else "feeling_worse_than_expected"
@@ -340,9 +338,11 @@ async def train_divergence_model(request: Request):
     pool = request.app.state.db_pool
     detector = request.app.state.divergence_detector
 
-    # Default: all available data
+    # Default: all available data from DB
     end_date = datetime.date.today()
-    start_date = end_date - datetime.timedelta(days=365)
+    async with pool.acquire() as conn:
+        earliest = await conn.fetchval("SELECT MIN(date) FROM daily_summaries")
+    start_date = earliest or (end_date - datetime.timedelta(days=365))
 
     # Extract training pairs
     X, y, feature_names, dates, log_ids = await extract_divergence_training_pairs(

@@ -24,7 +24,7 @@ ORDER BY date
 """
 
 CONDITION_QUERY = """
-SELECT avg(overall) AS avg_score
+SELECT avg(overall_vas) AS avg_score
 FROM condition_logs
 WHERE logged_at::date BETWEEN $1 AND $2
 """

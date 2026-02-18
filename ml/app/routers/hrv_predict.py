@@ -213,9 +213,14 @@ async def train_hrv_model(
     if body is None:
         body = HRVTrainRequest()
 
-    # Default date range: last 365 days
+    # Default date range: all available data
     end_date = body.end_date or datetime.date.today()
-    start_date = body.start_date or (end_date - datetime.timedelta(days=365))
+    if body.start_date:
+        start_date = body.start_date
+    else:
+        async with pool.acquire() as conn:
+            earliest = await conn.fetchval("SELECT MIN(date) FROM daily_summaries")
+        start_date = earliest or (end_date - datetime.timedelta(days=365))
 
     # Extract training matrix
     X, y, feature_names, valid_dates = await extract_hrv_training_matrix(
