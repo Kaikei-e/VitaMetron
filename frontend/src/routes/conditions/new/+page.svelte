@@ -1,16 +1,12 @@
 <script lang="ts">
-	import { apiFetch } from '$lib/api';
+	import { fetchTags } from '$lib/api/conditions';
 	import ConditionForm from '$lib/components/condition/ConditionForm.svelte';
-	import type { TagCount } from '$lib/types/condition';
 
 	let availableTags = $state<string[]>([]);
 
 	$effect(() => {
-		apiFetch('/api/conditions/tags')
-			.then((res) => res.json())
-			.then((data: TagCount[]) => {
-				availableTags = data.map((t) => t.tag);
-			})
+		fetchTags()
+			.then((tags) => (availableTags = tags))
 			.catch(() => {});
 	});
 </script>

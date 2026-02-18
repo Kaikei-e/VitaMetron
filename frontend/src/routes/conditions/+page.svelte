@@ -1,16 +1,23 @@
 <script lang="ts">
 	import ConditionList from '$lib/components/condition/ConditionList.svelte';
+	import WHO5Card from '$lib/components/condition/WHO5Card.svelte';
 	import DivergenceCard from '$lib/components/condition/DivergenceCard.svelte';
 	import DivergenceTimeline from '$lib/components/condition/DivergenceTimeline.svelte';
 	import DivergenceDrivers from '$lib/components/condition/DivergenceDrivers.svelte';
 	import SkeletonCard from '$lib/components/ui/SkeletonCard.svelte';
+	import { filterValidDivergences } from '$lib/utils/divergence';
+	import { deleteCondition } from '$lib/api/conditions';
+	import { invalidateAll } from '$app/navigation';
 
 	let { data } = $props();
 
+	async function handleDelete(id: number) {
+		await deleteCondition(id);
+		await invalidateAll();
+	}
+
 	let latestDetection = $derived.by(() => {
-		const valid = (data.divergenceRange ?? []).filter(
-			(d) => d.DivergenceType !== 'no_condition_log' && d.DivergenceType !== 'no_biometric_data'
-		);
+		const valid = filterValidDivergences(data.divergenceRange ?? []);
 		return valid.length > 0 ? valid[valid.length - 1] : null;
 	});
 </script>
@@ -28,6 +35,11 @@
 		New Entry
 	</a>
 </div>
+
+<!-- WHO-5 Card -->
+<section class="mb-6">
+	<WHO5Card latest={data.who5Latest} />
+</section>
 
 {#await data.divergenceStatus}
 	<section class="mb-6">
@@ -54,4 +66,5 @@
 	total={data.total}
 	page={data.page}
 	limit={data.limit}
+	ondelete={handleDelete}
 />
