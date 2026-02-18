@@ -59,6 +59,13 @@ export interface WeeklyInsight {
 	RiskSummary: string[];
 }
 
+export type DivergenceType =
+	| 'feeling_better_than_expected'
+	| 'feeling_worse_than_expected'
+	| 'aligned'
+	| 'no_condition_log'
+	| 'no_biometric_data';
+
 /** Matches Go entity.DivergenceDetection */
 export interface DivergenceDetection {
 	Date: string;
@@ -69,7 +76,7 @@ export interface DivergenceDetection {
 	CuSumPositive: number;
 	CuSumNegative: number;
 	CuSumAlert: boolean;
-	DivergenceType: string;
+	DivergenceType: DivergenceType;
 	Confidence: number;
 	TopDrivers: DivergenceContribution[];
 	Explanation: string;

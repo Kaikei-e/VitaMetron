@@ -71,9 +71,11 @@ export interface HeartRateSample {
 	Confidence: number;
 }
 
+export type SleepStage = 'deep' | 'light' | 'rem' | 'wake';
+
 export interface SleepStageEntry {
 	Time: string;
-	Stage: string; // "deep" | "light" | "rem" | "wake"
+	Stage: SleepStage;
 	Seconds: number;
 	LogID: number;
 }
@@ -94,6 +96,14 @@ export interface DataQuality {
 	ComputedAt: string;
 }
 
+export interface VRIMetricContribution {
+	metric: string;
+	z_score: number;
+	directed_z: number;
+	direction: string;
+	contribution: number;
+}
+
 export interface VRIScore {
 	Date: string;
 	VRIScore: number;
@@ -108,6 +118,8 @@ export interface VRIScore {
 	SRIValue: number | null;
 	SRIDaysUsed: number;
 	BaselineWindowDays: number;
+	BaselineMaturity: string;
+	ContributingFactors: VRIMetricContribution[] | null;
 	MetricsIncluded: string[];
 	ComputedAt: string;
 }
