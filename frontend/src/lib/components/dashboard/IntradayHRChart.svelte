@@ -13,10 +13,13 @@
 
 	const GRID_INTERVAL = 5; // minutes
 	const GRID_SIZE = (24 * 60) / GRID_INTERVAL; // 288 points
+	const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
 	function toMinuteOfDay(iso: string): number {
 		const d = new Date(iso);
-		return d.getUTCHours() * 60 + d.getUTCMinutes();
+		const jstMs = d.getTime() + JST_OFFSET_MS;
+		const jst = new Date(jstMs);
+		return jst.getUTCHours() * 60 + jst.getUTCMinutes();
 	}
 
 	function snapToGrid(samples: HeartRateSample[]): (number | null)[] {

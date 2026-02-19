@@ -31,6 +31,14 @@
 	let todayMin = $derived(stageMinutes(todayStages));
 	let yesterdayMin = $derived(stageMinutes(yesterdayStages));
 
+	let maxTotal = $derived(
+		Math.max(
+			Object.values(todayMin).reduce((a, b) => a + b, 0),
+			Object.values(yesterdayMin).reduce((a, b) => a + b, 0),
+			1
+		)
+	);
+
 	let datasets = $derived(
 		stageConfig.map((sc) => ({
 			label: sc.label,
@@ -55,7 +63,8 @@
 					scales: {
 						x: {
 							stacked: true,
-							title: { display: true, text: 'min' }
+							title: { display: true, text: 'min' },
+							suggestedMax: Math.ceil(maxTotal / 60) * 60
 						},
 						y: { stacked: true }
 					},
