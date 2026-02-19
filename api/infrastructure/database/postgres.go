@@ -9,7 +9,13 @@ import (
 )
 
 func NewPool(ctx context.Context, cfg config.DBConfig) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, cfg.DSN())
+	poolCfg, err := pgxpool.ParseConfig(cfg.DSN())
+	if err != nil {
+		return nil, fmt.Errorf("database: unable to parse config: %w", err)
+	}
+	poolCfg.ConnConfig.RuntimeParams["TimeZone"] = "Asia/Tokyo"
+
+	pool, err := pgxpool.NewWithConfig(ctx, poolCfg)
 	if err != nil {
 		return nil, fmt.Errorf("database: unable to create pool: %w", err)
 	}
