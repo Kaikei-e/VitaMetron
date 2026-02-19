@@ -1,5 +1,5 @@
 import { apiFetch, fetchJSON } from '$lib/server/api';
-import { todayISO, daysAgoISO } from '$lib/utils/date';
+import { effectiveDateISO, effectiveDaysAgoISO } from '$lib/utils/date';
 import type { ConditionLog, ConditionListResult } from '$lib/types/condition';
 import type { DivergenceDetection, DivergenceModelStatus } from '$lib/types/insights';
 import type { WHO5Assessment } from '$lib/types/who5';
@@ -20,8 +20,8 @@ export async function loadConditions(url: URL): Promise<ConditionsData> {
 	const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
 	const offset = (page - 1) * LIMIT;
 
-	const today = todayISO();
-	const thirtyDaysAgo = daysAgoISO(30);
+	const today = effectiveDateISO();
+	const thirtyDaysAgo = effectiveDaysAgoISO(30);
 
 	// Fast (DB direct) — await these
 	const [conditionsResult, divergenceRange, who5Latest] = await Promise.all([

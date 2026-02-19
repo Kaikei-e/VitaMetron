@@ -101,6 +101,13 @@
 	{/if}
 </div>
 
+<!-- Overnight mode banner -->
+{#if data.isOvernightMode}
+	<div class="bg-indigo-50 border border-indigo-300 text-indigo-800 dark:bg-indigo-900/40 dark:border-indigo-700 dark:text-indigo-200 rounded-lg px-4 py-3 mb-4 text-sm">
+		<span class="font-semibold">深夜モード</span> — 新しいデータが揃うまで、昨日のサマリーを表示しています。6時以降に本日分に切り替わります。
+	</div>
+{/if}
+
 <!-- Data quality warning -->
 {#if data.dataQuality && !data.dataQuality.IsValidDay}
 	<div class="bg-yellow-50 border border-yellow-300 text-yellow-800 dark:bg-yellow-900/40 dark:border-yellow-700 dark:text-yellow-200 rounded-lg px-4 py-3 mb-4 text-sm">
@@ -119,13 +126,13 @@
 
 <!-- Daily Advice -->
 <section class="mb-6">
-	<DailyAdviceCard advicePromise={data.todayAdvice} />
+	<DailyAdviceCard advicePromise={data.todayAdvice} effectiveDate={data.effectiveDate} />
 </section>
 
 <!-- Header: always visible -->
 <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 mb-6">
 	<VRICard vri={data.todayVRI} />
-	<ConditionCard condition={data.latestCondition} />
+	<ConditionCard condition={data.latestCondition} effectiveDate={data.effectiveDate} />
 </div>
 
 <!-- Tabbed sections -->

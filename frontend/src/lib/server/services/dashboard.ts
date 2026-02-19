@@ -1,5 +1,5 @@
 import { apiFetch, fetchJSON } from '$lib/server/api';
-import { todayISO, daysAgoISO } from '$lib/utils/date';
+import { effectiveDateISO, effectiveDaysAgoISO, isOvernightHours } from '$lib/utils/date';
 import type { ConditionLog, ConditionListResult } from '$lib/types/condition';
 import type {
 	DailySummary,
@@ -27,13 +27,16 @@ export interface DashboardData {
 	monthVRI: VRIScore[];
 	monthConditions: ConditionLog[];
 	todayAdvice: Promise<DailyAdvice | null>;
+	isOvernightMode: boolean;
+	effectiveDate: string;
 }
 
 export async function loadDashboard(): Promise<DashboardData> {
-	const today = todayISO();
-	const yesterday = daysAgoISO(1);
-	const sevenDaysAgo = daysAgoISO(7);
-	const thirtyDaysAgo = daysAgoISO(30);
+	const overnight = isOvernightHours();
+	const today = effectiveDateISO();
+	const yesterday = effectiveDaysAgoISO(1);
+	const sevenDaysAgo = effectiveDaysAgoISO(7);
+	const thirtyDaysAgo = effectiveDaysAgoISO(30);
 
 	// Start advice fetch early — don't await (LLM generation can be slow, 120s timeout)
 	const todayAdvice = fetchJSON<DailyAdvice | null>(`/api/advice?date=${today}`, null, 120_000);
@@ -97,6 +100,8 @@ export async function loadDashboard(): Promise<DashboardData> {
 		monthSummaries,
 		monthVRI,
 		monthConditions: monthCondRes.items ?? [],
-		todayAdvice
+		todayAdvice,
+		isOvernightMode: overnight,
+		effectiveDate: today
 	};
 }

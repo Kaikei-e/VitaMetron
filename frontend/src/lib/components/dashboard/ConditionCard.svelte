@@ -4,14 +4,18 @@
 	import { formatDateTime } from '$lib/utils/date';
 	import type { ConditionLog } from '$lib/types/condition';
 
-	let { condition }: { condition: ConditionLog | null } = $props();
+	let { condition, effectiveDate }: { condition: ConditionLog | null; effectiveDate: string } = $props();
 
 	let scoreColor = $derived(condition ? vasToTextColor(condition.OverallVAS) : '');
 	let label = $derived(condition ? vasToLabel(condition.OverallVAS) : '');
+	let isFromEffectiveDate = $derived(
+		condition ? condition.LoggedAt.startsWith(effectiveDate) : false
+	);
+	let cardTitle = $derived(isFromEffectiveDate ? "Today's Condition" : 'Latest Condition');
 </script>
 
 <Card>
-	<h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Today's Condition</h3>
+	<h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">{cardTitle}</h3>
 	{#if condition}
 		<div class="mt-2 flex items-baseline gap-2">
 			<span class="text-3xl font-bold {scoreColor}">{condition.OverallVAS}</span>

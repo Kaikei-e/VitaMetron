@@ -39,3 +39,21 @@ export function daysAgoISO(n: number): string {
 	d.setDate(d.getDate() - n);
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
+
+/** Hour at which the "health day" starts (JST) */
+export const DAY_START_HOUR = 6;
+
+/** True when current time is in overnight window (0:00–5:59) */
+export function isOvernightHours(): boolean {
+	return new Date().getHours() < DAY_START_HOUR;
+}
+
+/** "Effective today" — returns yesterday during overnight hours */
+export function effectiveDateISO(): string {
+	return isOvernightHours() ? daysAgoISO(1) : todayISO();
+}
+
+/** "Effective N days ago" — shifted by 1 during overnight hours */
+export function effectiveDaysAgoISO(n: number): string {
+	return daysAgoISO(isOvernightHours() ? n + 1 : n);
+}

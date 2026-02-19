@@ -1,5 +1,5 @@
 import { apiFetch, fetchJSON } from '$lib/server/api';
-import { todayISO, daysAgoISO } from '$lib/utils/date';
+import { effectiveDateISO, effectiveDaysAgoISO } from '$lib/utils/date';
 import type {
 	InsightsResult,
 	HRVPrediction,
@@ -18,8 +18,8 @@ export interface InsightsData {
 }
 
 export async function loadInsights(): Promise<InsightsData> {
-	const today = todayISO();
-	const weekAgo = daysAgoISO(7);
+	const today = effectiveDateISO();
+	const weekAgo = effectiveDaysAgoISO(7);
 
 	// Fast (DB / cached) — await these
 	const [anomaly, anomalyRange] = await Promise.all([

@@ -2,11 +2,10 @@
 	import Card from '$lib/components/ui/Card.svelte';
 	import HelpTooltip from '$lib/components/ui/HelpTooltip.svelte';
 	import { regenerateAdvice } from '$lib/api/advice';
-	import { todayISO } from '$lib/utils/date';
 	import { simpleMarkdownToHtml } from '$lib/utils/markdown';
 	import type { DailyAdvice } from '$lib/types/advice';
 
-	let { advicePromise }: { advicePromise: Promise<DailyAdvice | null> } = $props();
+	let { advicePromise, effectiveDate }: { advicePromise: Promise<DailyAdvice | null>; effectiveDate: string } = $props();
 
 	let currentAdvice = $state<DailyAdvice | null>(null);
 	let regenerating = $state(false);
@@ -24,7 +23,7 @@
 		regenerating = true;
 		error = null;
 		try {
-			currentAdvice = await regenerateAdvice(todayISO());
+			currentAdvice = await regenerateAdvice(effectiveDate);
 		} catch {
 			error = 'アドバイスの再生成に失敗しました';
 		} finally {
