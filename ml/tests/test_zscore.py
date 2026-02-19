@@ -74,6 +74,37 @@ class TestRobustZscore:
         # 0.6745 * 20 / 5 = 0.6745 * 4 = 2.698
         assert abs(z - 2.698) < 0.01
 
+    def test_metric_none_no_floor(self):
+        """Without metric name, no MAD floor is applied."""
+        z = robust_zscore(97.0, 96.5, 0.5, metric=None)
+        # 0.6745 * 0.5 / 0.5 = 0.6745
+        assert abs(z - 0.6745) < 1e-4
+
+    def test_spo2_mad_floor(self):
+        """SpO2 should use MAD floor of 1.0 when actual MAD is smaller."""
+        # Without floor: 0.6745 * 1.0 / 0.5 = 1.349
+        # With floor:    0.6745 * 1.0 / 1.0 = 0.6745
+        z = robust_zscore(97.5, 96.5, 0.5, metric="spo2")
+        assert abs(z - 0.6745) < 1e-4
+
+    def test_spo2_mad_above_floor(self):
+        """When actual MAD exceeds the floor, the floor has no effect."""
+        z_with = robust_zscore(97.5, 96.5, 1.5, metric="spo2")
+        z_without = robust_zscore(97.5, 96.5, 1.5)
+        assert abs(z_with - z_without) < 1e-10
+
+    def test_unknown_metric_no_floor(self):
+        """Unknown metric names should not apply any MAD floor."""
+        z = robust_zscore(97.0, 96.5, 0.5, metric="resting_hr")
+        # 0.6745 * 0.5 / 0.5 = 0.6745
+        assert abs(z - 0.6745) < 1e-4
+
+    def test_spo2_mad_zero_uses_floor(self):
+        """SpO2 with MAD=0 should use the floor instead of returning 0."""
+        z = robust_zscore(97.5, 96.5, 0.0, metric="spo2")
+        # 0.6745 * 1.0 / 1.0 = 0.6745
+        assert abs(z - 0.6745) < 1e-4
+
 
 class TestExtractValid:
     def test_filters_none(self):
@@ -99,3 +130,29 @@ class TestExtractValid:
         result = _extract_valid(rmssd_values, transform=lambda v: math.log(float(v)))
         expected = [math.log(20), math.log(40), math.log(60)]
         np.testing.assert_allclose(result, expected)
+
+    def test_exclude_zero_filters_zeros(self):
+        """With exclude_zero=True, zeros should be filtered out."""
+        result = _extract_valid([0.0, 1.0, 0.0, 3.0, 0, 5.0], exclude_zero=True)
+        np.testing.assert_array_equal(result, [1.0, 3.0, 5.0])
+
+    def test_exclude_zero_false_keeps_zeros(self):
+        """With exclude_zero=False (default), zeros are kept."""
+        result = _extract_valid([0.0, 1.0, 0.0, 3.0])
+        np.testing.assert_array_equal(result, [0.0, 1.0, 0.0, 3.0])
+
+    def test_exclude_zero_with_transform(self):
+        """Zeros should be filtered before transform is applied."""
+        # math.log(0) would be -inf, but it should never be called
+        result = _extract_valid([0.0, 1.0, 10.0], transform=math.log, exclude_zero=True)
+        np.testing.assert_allclose(result, [math.log(1.0), math.log(10.0)])
+
+    def test_exclude_zero_all_zeros_returns_empty(self):
+        """All zeros with exclude_zero=True should return empty array."""
+        result = _extract_valid([0.0, 0, 0.0], exclude_zero=True)
+        assert len(result) == 0
+
+    def test_exclude_zero_combined_with_none(self):
+        """Both None and zero should be filtered."""
+        result = _extract_valid([None, 0.0, 1.0, None, 0, 3.0], exclude_zero=True)
+        np.testing.assert_array_equal(result, [1.0, 3.0])

@@ -84,7 +84,6 @@ def _factors_from_z_scores(
         "z_resting_hr": ("resting_hr", -1),
         "z_sleep_duration": ("sleep_duration", 1),
         "z_sri": ("sri", 1),
-        "z_spo2": ("spo2", 1),
         "z_deep_sleep": ("deep_sleep", 1),
         "z_br": ("br", -1),
     }

@@ -1,7 +1,11 @@
 """VRI (Vitality Recovery Index) composite scorer.
 
-Combines 7 biometric dimensions into a single 0-100 score using
+Combines 6 biometric dimensions into a single 0-100 score using
 robust Z-score normalization and tanh mapping.
+
+SpO2 is intentionally excluded — wearable measurement noise (±2-4%)
+exceeds true biological variation (SD 0.5-1.0%), and clinical
+guidelines treat SpO2 as a threshold metric, not a continuous one.
 """
 
 import logging
@@ -18,20 +22,26 @@ METRICS = [
     ("resting_hr", "resting_hr", float, -1),
     ("sleep_duration", "sleep_duration_min", float, 1),
     ("sri", None, float, 1),  # computed separately
-    ("spo2", "spo2_avg", float, 1),
     ("deep_sleep", "sleep_deep_min", float, 1),
     ("br", "br_full_sleep", float, -1),
 ]
+
+# Maximum absolute z-score for any single metric.
+# Values beyond ±3 are treated as outliers (standard in medical statistics).
+# Prevents any single metric from dominating the composite VRI score.
+Z_CLAMP = 3.0
 
 BASELINE_KEY_MAP = {
     "ln_rmssd": ("ln_rmssd_median", "ln_rmssd_mad"),
     "resting_hr": ("rhr_median", "rhr_mad"),
     "sleep_duration": ("sleep_dur_median", "sleep_dur_mad"),
     "sri": ("sri_median", "sri_mad"),
-    "spo2": ("spo2_median", "spo2_mad"),
     "deep_sleep": ("deep_sleep_median", "deep_sleep_mad"),
     "br": ("br_median", "br_mad"),
 }
+
+# Source fields where 0 is a sentinel for "no data" (physiologically impossible)
+_ZERO_IS_MISSING_FIELDS = {"hrv_daily_rmssd", "resting_hr", "br_full_sleep"}
 
 
 def compute_vri(
@@ -65,6 +75,14 @@ def compute_vri(
         else:
             raw_value = today_data.get(source_field)
 
+        # Treat zero as missing for sentinel metrics
+        if (
+            raw_value is not None
+            and source_field in _ZERO_IS_MISSING_FIELDS
+            and float(raw_value) == 0.0
+        ):
+            raw_value = None
+
         if raw_value is None:
             z_scores[f"z_{key}"] = None
             continue
@@ -88,12 +106,13 @@ def compute_vri(
             z_scores[f"z_{key}"] = None
             continue
 
-        # Compute Z-score
-        z = robust_zscore(value, median, mad)
+        # Compute Z-score (pass metric name for MAD floor lookup)
+        z = robust_zscore(value, median, mad, metric=key)
         z_scores[f"z_{key}"] = z
 
         # Apply direction (negate for "lower is better" metrics)
-        directed_z = z * direction
+        # Clamp to ±Z_CLAMP to prevent any single outlier from dominating VRI
+        directed_z = max(-Z_CLAMP, min(Z_CLAMP, z * direction))
         directed_zs.append(directed_z)
         metrics_included.append(key)
 

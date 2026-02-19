@@ -35,7 +35,22 @@ def median_absolute_deviation(values: np.ndarray) -> float:
     return float(np.median(np.abs(values - med)))
 
 
-def robust_zscore(value: float, median: float, mad: float) -> float:
+# Minimum MAD floors to prevent noise amplification on narrow-range metrics.
+# SpO2 population SD ≈ 1.0-1.5%, so MAD floor = 1.0 (≈ SD / 1.4826).
+# Without this floor, SpO2's tiny natural MAD (~0.5) causes 1% changes to
+# produce z-scores 2x larger than clinically warranted.
+MIN_MAD: dict[str, float] = {
+    "spo2": 1.0,
+}
+
+# Minimum valid data points required for a meaningful baseline.
+# Below this threshold, median/MAD are unreliable and the metric is excluded.
+MIN_BASELINE_COUNT = 7
+
+
+def robust_zscore(
+    value: float, median: float, mad: float, metric: str | None = None
+) -> float:
     """Compute robust Z-score using median/MAD normalization.
 
     Formula: 0.6745 * (Xi - Median) / MAD
@@ -43,24 +58,46 @@ def robust_zscore(value: float, median: float, mad: float) -> float:
     The constant 0.6745 makes MAD consistent with standard deviation
     for normally distributed data.
 
-    Returns 0.0 if MAD is 0 (all values identical).
+    Args:
+        value: Today's metric value.
+        median: Baseline median.
+        mad: Baseline MAD (Median Absolute Deviation).
+        metric: Optional metric name used to look up a minimum MAD floor
+                (see ``MIN_MAD``).  Prevents noise amplification for
+                narrow-range metrics like SpO2.
+
+    Returns 0.0 if effective MAD is 0 (all values identical and no floor).
     """
-    if mad == 0.0:
+    floor = MIN_MAD.get(metric, 0.0) if metric else 0.0
+    effective_mad = max(mad, floor)
+    if effective_mad == 0.0:
         return 0.0
-    return 0.6745 * (value - median) / mad
+    return 0.6745 * (value - median) / effective_mad
 
 
-def _extract_valid(values: list, transform=None) -> np.ndarray:
-    """Extract non-None values, optionally applying a transform."""
+def _extract_valid(
+    values: list, transform=None, exclude_zero: bool = False
+) -> np.ndarray:
+    """Extract non-None values, optionally applying a transform.
+
+    Args:
+        values: Raw values list (may contain None).
+        transform: Optional transform function (e.g., math.log).
+        exclude_zero: If True, treat 0 as missing (skip before transform).
+                      Use for metrics where 0 is a sentinel for "no data".
+    """
     result = []
     for v in values:
-        if v is not None:
-            try:
-                val = transform(v) if transform else float(v)
-                if math.isfinite(val):
-                    result.append(val)
-            except (ValueError, TypeError):
-                continue
+        if v is None:
+            continue
+        if exclude_zero and float(v) == 0.0:
+            continue
+        try:
+            val = transform(v) if transform else float(v)
+            if math.isfinite(val):
+                result.append(val)
+        except (ValueError, TypeError):
+            continue
     return np.array(result)
 
 
@@ -85,28 +122,29 @@ async def compute_rolling_baseline(
     br_vals = [r["br_full_sleep"] for r in rows]
 
     def _stats(values: np.ndarray) -> tuple[float | None, float | None, int]:
-        if len(values) == 0:
-            return None, None, 0
+        if len(values) < MIN_BASELINE_COUNT:
+            return None, None, len(values)
         return float(np.median(values)), median_absolute_deviation(values), len(values)
 
-    # ln(RMSSD) transform
-    ln_rmssd = _extract_valid(hrv_vals, transform=lambda v: math.log(float(v)))
+    # Metrics where 0 means "no data" (physiologically impossible sentinel)
+    ln_rmssd = _extract_valid(hrv_vals, transform=lambda v: math.log(float(v)), exclude_zero=True)
     ln_med, ln_mad, ln_count = _stats(ln_rmssd)
 
-    rhr = _extract_valid(rhr_vals)
+    rhr = _extract_valid(rhr_vals, exclude_zero=True)
     rhr_med, rhr_mad, rhr_count = _stats(rhr)
 
+    spo2 = _extract_valid(spo2_vals, exclude_zero=True)
+    spo2_med, spo2_mad, spo2_count = _stats(spo2)
+
+    br = _extract_valid(br_vals, exclude_zero=True)
+    br_med, br_mad, br_count = _stats(br)
+
+    # Metrics where 0 can be a legitimate value
     sleep_dur = _extract_valid(sleep_dur_vals)
     sd_med, sd_mad, sd_count = _stats(sleep_dur)
 
-    spo2 = _extract_valid(spo2_vals)
-    spo2_med, spo2_mad, spo2_count = _stats(spo2)
-
     deep_sleep = _extract_valid(deep_sleep_vals)
     ds_med, ds_mad, ds_count = _stats(deep_sleep)
-
-    br = _extract_valid(br_vals)
-    br_med, br_mad, br_count = _stats(br)
 
     return {
         "ln_rmssd_median": ln_med,

@@ -3,6 +3,7 @@ import math
 import pytest
 
 from app.models.vri_scorer import (
+    Z_CLAMP,
     baseline_maturity_label,
     compute_vri,
 )
@@ -96,14 +97,14 @@ class TestComputeVRI:
     def test_partial_metrics(self):
         """Should work with some metrics missing."""
         baseline = _make_baseline()
-        today = _make_today(spo2_avg=None, br_full_sleep=None)
+        today = _make_today(sleep_deep_min=None, br_full_sleep=None)
 
         vri, conf, z_scores, factors = compute_vri(today, baseline, sri_value=75.0, quality_confidence=0.8)
 
         assert 0 <= vri <= 100
-        assert z_scores["z_spo2"] is None
+        assert z_scores["z_deep_sleep"] is None
         assert z_scores["z_br"] is None
-        # Confidence should be reduced due to missing metrics
+        # Confidence should be reduced due to missing metrics (4/6 < 0.8)
         assert conf < 0.8
 
     def test_no_metrics_gives_50(self):
@@ -199,6 +200,159 @@ class TestComputeVRI:
 
         contributions = [f.contribution for f in factors]
         assert contributions == sorted(contributions, reverse=True)
+
+    def test_spo2_excluded_from_vri(self):
+        """SpO2 should not be included in VRI computation."""
+        baseline = _make_baseline()
+        today = _make_today()
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        # z_spo2 should not appear in z_scores at all
+        assert "z_spo2" not in z_scores
+        # No factor should reference spo2
+        spo2_factors = [f for f in factors if f.metric == "spo2"]
+        assert len(spo2_factors) == 0
+
+    def test_z_clamp_all_metrics(self):
+        """All directed Z-scores should be within ±Z_CLAMP."""
+        baseline = _make_baseline()
+        today = _make_today(
+            hrv_daily_rmssd=5.0,
+            resting_hr=100,
+            sleep_duration_min=120,
+            spo2_avg=85.0,
+            sleep_deep_min=5,
+            br_full_sleep=25.0,
+        )
+
+        _, _, _, factors = compute_vri(
+            today, baseline, sri_value=10.0, quality_confidence=1.0
+        )
+
+        for f in factors:
+            assert -Z_CLAMP <= f.directed_z <= Z_CLAMP, (
+                f"{f.metric} directed_z={f.directed_z} outside ±{Z_CLAMP}"
+            )
+
+    def test_spo2_variation_does_not_affect_vri(self):
+        """Varying SpO2 should not change VRI score at all."""
+        baseline = _make_baseline()
+        today_normal = _make_today(spo2_avg=96.5)
+        today_low = _make_today(spo2_avg=85.0)
+
+        vri_normal, _, _, _ = compute_vri(
+            today_normal, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+        vri_low, _, _, _ = compute_vri(
+            today_low, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert vri_normal == vri_low
+
+    def test_non_spo2_unaffected_by_mad_floor(self):
+        """Non-SpO2 metrics should be unaffected by the MAD floor."""
+        baseline = _make_baseline()
+        today = _make_today(resting_hr=65)  # 3 above median
+
+        _, _, z_scores, _ = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        # rhr_mad=3.0, z = 0.6745 * 3.0 / 3.0 = 0.6745
+        assert z_scores["z_resting_hr"] is not None
+        assert abs(z_scores["z_resting_hr"] - 0.6745) < 1e-3
+
+
+class TestZeroAsMissing:
+    def test_br_zero_treated_as_missing(self):
+        """br_full_sleep=0 should be treated as missing, not scored."""
+        baseline = _make_baseline()
+        today = _make_today(br_full_sleep=0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_br"] is None
+        br_factors = [f for f in factors if f.metric == "br"]
+        assert len(br_factors) == 0
+
+    def test_rhr_zero_treated_as_missing(self):
+        """resting_hr=0 should be treated as missing, not scored."""
+        baseline = _make_baseline()
+        today = _make_today(resting_hr=0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_resting_hr"] is None
+        rhr_factors = [f for f in factors if f.metric == "resting_hr"]
+        assert len(rhr_factors) == 0
+
+    def test_hrv_zero_treated_as_missing(self):
+        """hrv_daily_rmssd=0 should be treated as missing, not scored."""
+        baseline = _make_baseline()
+        today = _make_today(hrv_daily_rmssd=0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_ln_rmssd"] is None
+        hrv_factors = [f for f in factors if f.metric == "ln_rmssd"]
+        assert len(hrv_factors) == 0
+
+    def test_insufficient_baseline_excludes_metric(self):
+        """When baseline has None median (insufficient data), metric is excluded."""
+        baseline = _make_baseline(br_median=None, br_mad=None, br_count=1)
+        today = _make_today(br_full_sleep=18.0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_br"] is None
+        br_factors = [f for f in factors if f.metric == "br"]
+        assert len(br_factors) == 0
+
+    def test_baseline_at_min_count_includes_metric(self):
+        """When baseline has valid median/MAD (enough data), metric is included."""
+        baseline = _make_baseline(br_median=15.0, br_mad=1.0, br_count=7)
+        today = _make_today(br_full_sleep=16.0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_br"] is not None
+        br_factors = [f for f in factors if f.metric == "br"]
+        assert len(br_factors) == 1
+
+    def test_deep_sleep_zero_is_valid(self):
+        """sleep_deep_min=0 is a valid reading, not a sentinel."""
+        baseline = _make_baseline()
+        today = _make_today(sleep_deep_min=0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_deep_sleep"] is not None
+
+    def test_sleep_duration_zero_is_valid(self):
+        """sleep_duration_min=0 is not a sentinel (even if implausible)."""
+        baseline = _make_baseline()
+        today = _make_today(sleep_duration_min=0)
+
+        _, _, z_scores, factors = compute_vri(
+            today, baseline, sri_value=75.0, quality_confidence=0.8
+        )
+
+        assert z_scores["z_sleep_duration"] is not None
 
 
 class TestBaselineMaturityLabel:

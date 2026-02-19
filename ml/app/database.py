@@ -16,6 +16,7 @@ async def create_pool(settings: Settings) -> asyncpg.Pool:
         password=settings.db_password,
         min_size=2,
         max_size=10,
+        server_settings={"TimeZone": "Asia/Tokyo"},
     )
     logger.info("Database connection pool created")
     return pool
