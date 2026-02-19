@@ -18,3 +18,18 @@ type AnomalyDetection struct {
 	ModelVersion         string          `json:"ModelVersion"`
 	ComputedAt           time.Time       `json:"ComputedAt"`
 }
+
+type AnomalyTrainResult struct {
+	ModelVersion     string   `json:"ModelVersion"`
+	TrainingDaysUsed int      `json:"TrainingDaysUsed"`
+	Contamination    float64  `json:"Contamination"`
+	PotThreshold     float64  `json:"PotThreshold"`
+	FeatureNames     []string `json:"FeatureNames"`
+	Message          string   `json:"Message"`
+}
+
+type AnomalyModelStatus struct {
+	IsReady      bool     `json:"IsReady"`
+	ModelVersion string   `json:"ModelVersion"`
+	FeatureNames []string `json:"FeatureNames"`
+}
