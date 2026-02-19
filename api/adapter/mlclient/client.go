@@ -280,6 +280,87 @@ func (c *Client) DetectAnomalyRange(ctx context.Context, from, to time.Time) ([]
 	return results, nil
 }
 
+type anomalyTrainResponseML struct {
+	ModelVersion     string   `json:"model_version"`
+	TrainingDaysUsed int      `json:"training_days_used"`
+	Contamination    float64  `json:"contamination"`
+	PotThreshold     float64  `json:"pot_threshold"`
+	FeatureNames     []string `json:"feature_names"`
+	Message          string   `json:"message"`
+}
+
+func (c *Client) TrainAnomalyModel(ctx context.Context) (*entity.AnomalyTrainResult, error) {
+	url := fmt.Sprintf("%s/anomaly/train", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.trainClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var tr anomalyTrainResponseML
+	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		return nil, err
+	}
+
+	return &entity.AnomalyTrainResult{
+		ModelVersion:     tr.ModelVersion,
+		TrainingDaysUsed: tr.TrainingDaysUsed,
+		Contamination:    tr.Contamination,
+		PotThreshold:     tr.PotThreshold,
+		FeatureNames:     tr.FeatureNames,
+		Message:          tr.Message,
+	}, nil
+}
+
+type anomalyStatusResponse struct {
+	IsReady      bool     `json:"is_ready"`
+	ModelVersion *string  `json:"model_version"`
+	FeatureNames []string `json:"feature_names"`
+}
+
+func (c *Client) GetAnomalyStatus(ctx context.Context) (*entity.AnomalyModelStatus, error) {
+	url := fmt.Sprintf("%s/anomaly/status", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var sr anomalyStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, err
+	}
+
+	modelVersion := ""
+	if sr.ModelVersion != nil {
+		modelVersion = *sr.ModelVersion
+	}
+
+	return &entity.AnomalyModelStatus{
+		IsReady:      sr.IsReady,
+		ModelVersion: modelVersion,
+		FeatureNames: sr.FeatureNames,
+	}, nil
+}
+
 // --- HRV Prediction ---
 
 type hrvContribution struct {
