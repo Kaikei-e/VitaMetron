@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -62,6 +63,17 @@ func (h *DivergenceHandler) GetDivergenceRange(c echo.Context) error {
 	to, err := parseDate(toStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid to date"})
+	}
+
+	// If today falls within the requested range, trigger on-demand computation
+	// before the DB query so the result is available in the range response.
+	// ML's DetectDivergence checks DB cache first, so repeated calls are cheap.
+	// Errors are ignored — ML down or missing data should not break the range query.
+	todayDate := time.Now().In(jst).Format("2006-01-02")
+	if todayDate >= from.Format("2006-01-02") && todayDate <= to.Format("2006-01-02") {
+		if todayTime, err := parseDate(todayDate); err == nil {
+			h.mlClient.DetectDivergence(c.Request().Context(), todayTime)
+		}
 	}
 
 	detections, err := h.divergenceRepo.ListRange(c.Request().Context(), from, to)
