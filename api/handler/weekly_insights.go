@@ -24,7 +24,7 @@ func (h *WeeklyInsightsHandler) GetWeekly(c echo.Context) error {
 		date = time.Now()
 	} else {
 		var err error
-		date, err = time.Parse("2006-01-02", dateStr)
+		date, err = parseDate(dateStr)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 		}

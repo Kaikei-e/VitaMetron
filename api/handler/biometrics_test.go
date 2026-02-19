@@ -314,15 +314,17 @@ func TestBiometricsHandler_GetSleepStages_FallbackFiltersMainSession(t *testing.
 
 	// No summary → fallback uses ListByTimeRange with overnight window.
 	// Two sessions: LogID 100 (main, 7h) and LogID 200 (nap, 30min).
+	// Times form a chain for LogID 100 so deduplicateStages keeps them.
+	t0 := time.Date(2025, 6, 14, 23, 0, 0, 0, time.UTC)
 	h := NewBiometricsHandler(
 		&stubDailySummaryRepo{summary: nil},
 		&stubHeartRateRepo{},
 		&stubSleepStageRepo{timeRangeStages: []entity.SleepStage{
-			{Stage: "deep", Seconds: 3600, LogID: 100},
-			{Stage: "light", Seconds: 10800, LogID: 100},
-			{Stage: "rem", Seconds: 7200, LogID: 100},
-			{Stage: "wake", Seconds: 3600, LogID: 100},
-			{Stage: "light", Seconds: 1800, LogID: 200}, // nap
+			{Time: t0, Stage: "deep", Seconds: 3600, LogID: 100},
+			{Time: t0.Add(3600 * time.Second), Stage: "light", Seconds: 10800, LogID: 100},
+			{Time: t0.Add((3600 + 10800) * time.Second), Stage: "rem", Seconds: 7200, LogID: 100},
+			{Time: t0.Add((3600 + 10800 + 7200) * time.Second), Stage: "wake", Seconds: 3600, LogID: 100},
+			{Time: t0.Add(10 * time.Hour), Stage: "light", Seconds: 1800, LogID: 200}, // nap
 		}},
 		&stubDataQualityRepo{},
 	)
@@ -379,6 +381,8 @@ func TestBiometricsHandler_GetSleepStages_PrimaryPathFiltersDuplicates(t *testin
 	// Summary exists (primary path) but stages contain dual-source duplicates:
 	// Fitbit (LogID 999, 340min) + Health Connect (LogID 0, 132min).
 	// filterMainSleepSession should keep only the Fitbit session.
+	// Times form a chain for LogID 999 so deduplicateStages keeps them.
+	t0 := time.Date(2025, 6, 14, 23, 0, 0, 0, time.UTC)
 	h := NewBiometricsHandler(
 		&stubDailySummaryRepo{summary: &entity.DailySummary{
 			SleepStart: &sleepStart,
@@ -386,13 +390,13 @@ func TestBiometricsHandler_GetSleepStages_PrimaryPathFiltersDuplicates(t *testin
 		}},
 		&stubHeartRateRepo{},
 		&stubSleepStageRepo{timeRangeStages: []entity.SleepStage{
-			{Stage: "deep", Seconds: 4800, LogID: 999},
-			{Stage: "light", Seconds: 9000, LogID: 999},
-			{Stage: "rem", Seconds: 4200, LogID: 999},
-			{Stage: "wake", Seconds: 2400, LogID: 999},
-			{Stage: "deep", Seconds: 1800, LogID: 0},
-			{Stage: "light", Seconds: 3600, LogID: 0},
-			{Stage: "rem", Seconds: 2520, LogID: 0},
+			{Time: t0, Stage: "deep", Seconds: 4800, LogID: 999},
+			{Time: t0.Add(4800 * time.Second), Stage: "light", Seconds: 9000, LogID: 999},
+			{Time: t0.Add((4800 + 9000) * time.Second), Stage: "rem", Seconds: 4200, LogID: 999},
+			{Time: t0.Add((4800 + 9000 + 4200) * time.Second), Stage: "wake", Seconds: 2400, LogID: 999},
+			{Time: t0, Stage: "deep", Seconds: 1800, LogID: 0},
+			{Time: t0.Add(1800 * time.Second), Stage: "light", Seconds: 3600, LogID: 0},
+			{Time: t0.Add((1800 + 3600) * time.Second), Stage: "rem", Seconds: 2520, LogID: 0},
 		}},
 		&stubDataQualityRepo{},
 	)
@@ -528,6 +532,28 @@ func TestBiometricsHandler_GetDataQualityRange_OK(t *testing.T) {
 	}
 }
 
+func TestParseDate_JST(t *testing.T) {
+	d, err := parseDate("2026-02-19")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 2026-02-19 00:00:00 JST = 2026-02-18 15:00:00 UTC
+	utc := d.UTC()
+	if utc.Day() != 18 || utc.Hour() != 15 {
+		t.Errorf("expected 2026-02-18 15:00 UTC, got %v", utc)
+	}
+	if d.Location().String() != "JST" {
+		t.Errorf("expected JST location, got %s", d.Location())
+	}
+}
+
+func TestParseDate_InvalidFormat(t *testing.T) {
+	_, err := parseDate("not-a-date")
+	if err == nil {
+		t.Error("expected error for invalid date format")
+	}
+}
+
 func TestBiometricsHandler_GetDataQualityRange_BadFrom(t *testing.T) {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/biometrics/quality/range?from=bad&to=2025-06-15", nil)
@@ -541,4 +567,53 @@ func TestBiometricsHandler_GetDataQualityRange_BadFrom(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
 	}
+}
+
+func TestDeduplicateStages(t *testing.T) {
+	base := time.Date(2026, 2, 18, 17, 0, 0, 0, time.UTC)
+
+	t.Run("normal chain unchanged", func(t *testing.T) {
+		stages := []entity.SleepStage{
+			{Time: base, Stage: "light", Seconds: 960},
+			{Time: base.Add(960 * time.Second), Stage: "deep", Seconds: 1800},
+			{Time: base.Add((960 + 1800) * time.Second), Stage: "rem", Seconds: 1200},
+		}
+		result := deduplicateStages(stages)
+		if len(result) != 3 {
+			t.Errorf("expected 3 stages, got %d", len(result))
+		}
+	})
+
+	t.Run("overlapping entries removed", func(t *testing.T) {
+		stages := []entity.SleepStage{
+			{Time: base, Stage: "light", Seconds: 960},
+			{Time: base.Add(30 * time.Second), Stage: "light", Seconds: 900}, // overlap
+			{Time: base.Add(960 * time.Second), Stage: "deep", Seconds: 1800},
+			{Time: base.Add(990 * time.Second), Stage: "deep", Seconds: 1740}, // overlap
+		}
+		result := deduplicateStages(stages)
+		if len(result) != 2 {
+			t.Errorf("expected 2 stages, got %d", len(result))
+		}
+		if result[0].Stage != "light" || result[1].Stage != "deep" {
+			t.Errorf("unexpected stages: %v", result)
+		}
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := deduplicateStages(nil)
+		if len(result) != 0 {
+			t.Errorf("expected 0, got %d", len(result))
+		}
+	})
+
+	t.Run("single entry", func(t *testing.T) {
+		stages := []entity.SleepStage{
+			{Time: base, Stage: "deep", Seconds: 1800},
+		}
+		result := deduplicateStages(stages)
+		if len(result) != 1 {
+			t.Errorf("expected 1, got %d", len(result))
+		}
+	})
 }

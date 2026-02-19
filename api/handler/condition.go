@@ -76,8 +76,8 @@ func (h *ConditionHandler) GetByID(c echo.Context) error {
 }
 
 func (h *ConditionHandler) List(c echo.Context) error {
-	from, _ := time.Parse("2006-01-02", c.QueryParam("from"))
-	to, toErr := time.Parse("2006-01-02", c.QueryParam("to"))
+	from, _ := parseDate(c.QueryParam("from"))
+	to, toErr := parseDate(c.QueryParam("to"))
 
 	if from.IsZero() {
 		from = time.Now().AddDate(0, -1, 0)
@@ -178,8 +178,8 @@ func (h *ConditionHandler) GetTags(c echo.Context) error {
 }
 
 func (h *ConditionHandler) GetSummary(c echo.Context) error {
-	from, _ := time.Parse("2006-01-02", c.QueryParam("from"))
-	to, toErr := time.Parse("2006-01-02", c.QueryParam("to"))
+	from, _ := parseDate(c.QueryParam("from"))
+	to, toErr := parseDate(c.QueryParam("to"))
 
 	if from.IsZero() {
 		from = time.Now().AddDate(0, -1, 0)

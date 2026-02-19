@@ -38,7 +38,7 @@ func (h *BiometricsHandler) GetDailySummary(c echo.Context) error {
 		date = time.Now()
 	} else {
 		var err error
-		date, err = time.Parse("2006-01-02", dateStr)
+		date, err = parseDate(dateStr)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 		}
@@ -59,11 +59,11 @@ func (h *BiometricsHandler) GetDailySummaryRange(c echo.Context) error {
 	fromStr := c.QueryParam("from")
 	toStr := c.QueryParam("to")
 
-	from, err := time.Parse("2006-01-02", fromStr)
+	from, err := parseDate(fromStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid 'from' date format"})
 	}
-	to, err := time.Parse("2006-01-02", toStr)
+	to, err := parseDate(toStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid 'to' date format"})
 	}
@@ -86,7 +86,7 @@ func (h *BiometricsHandler) GetDailySummaryRange(c echo.Context) error {
 
 func (h *BiometricsHandler) GetHeartRateIntraday(c echo.Context) error {
 	dateStr := c.QueryParam("date")
-	date, err := time.Parse("2006-01-02", dateStr)
+	date, err := parseDate(dateStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 	}
@@ -106,7 +106,7 @@ func (h *BiometricsHandler) GetHeartRateIntraday(c echo.Context) error {
 
 func (h *BiometricsHandler) GetSleepStages(c echo.Context) error {
 	dateStr := c.QueryParam("date")
-	date, err := time.Parse("2006-01-02", dateStr)
+	date, err := parseDate(dateStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 	}
@@ -130,6 +130,7 @@ func (h *BiometricsHandler) GetSleepStages(c echo.Context) error {
 	// (Fitbit sync + Health Connect import) where LogID differs.
 	if err == nil {
 		stages = filterMainSleepSession(stages)
+		stages = deduplicateStages(stages)
 	}
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -147,7 +148,7 @@ func (h *BiometricsHandler) GetDataQuality(c echo.Context) error {
 		date = time.Now()
 	} else {
 		var err error
-		date, err = time.Parse("2006-01-02", dateStr)
+		date, err = parseDate(dateStr)
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 		}
@@ -168,11 +169,11 @@ func (h *BiometricsHandler) GetDataQualityRange(c echo.Context) error {
 	fromStr := c.QueryParam("from")
 	toStr := c.QueryParam("to")
 
-	from, err := time.Parse("2006-01-02", fromStr)
+	from, err := parseDate(fromStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid 'from' date format"})
 	}
-	to, err := time.Parse("2006-01-02", toStr)
+	to, err := parseDate(toStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid 'to' date format"})
 	}
@@ -224,6 +225,24 @@ func filterMainSleepSession(stages []entity.SleepStage) []entity.SleepStage {
 		}
 	}
 	return filtered
+}
+
+// deduplicateStages removes overlapping entries by keeping only
+// chain-connected stages (where end_time == next start_time).
+func deduplicateStages(stages []entity.SleepStage) []entity.SleepStage {
+	if len(stages) <= 1 {
+		return stages
+	}
+	result := []entity.SleepStage{stages[0]}
+	for i := 1; i < len(stages); i++ {
+		prev := result[len(result)-1]
+		prevEnd := prev.Time.Add(time.Duration(prev.Seconds) * time.Second)
+		if stages[i].Time.Before(prevEnd) {
+			continue
+		}
+		result = append(result, stages[i])
+	}
+	return result
 }
 
 func (h *BiometricsHandler) Register(g *echo.Group) {

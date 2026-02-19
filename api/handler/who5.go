@@ -33,11 +33,11 @@ func (h *WHO5Handler) Create(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
 	}
 
-	periodStart, err := time.Parse("2006-01-02", req.PeriodStart)
+	periodStart, err := parseDate(req.PeriodStart)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid period_start format"})
 	}
-	periodEnd, err := time.Parse("2006-01-02", req.PeriodEnd)
+	periodEnd, err := parseDate(req.PeriodEnd)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid period_end format"})
 	}

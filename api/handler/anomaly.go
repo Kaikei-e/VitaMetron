@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -26,7 +25,7 @@ func (h *AnomalyHandler) GetAnomaly(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "date is required"})
 	}
 
-	date, err := time.Parse("2006-01-02", dateStr)
+	date, err := parseDate(dateStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 	}
@@ -56,11 +55,11 @@ func (h *AnomalyHandler) GetAnomalyRange(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "from and to are required"})
 	}
 
-	from, err := time.Parse("2006-01-02", fromStr)
+	from, err := parseDate(fromStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid from date"})
 	}
-	to, err := time.Parse("2006-01-02", toStr)
+	to, err := parseDate(toStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid to date"})
 	}
@@ -77,7 +76,27 @@ func (h *AnomalyHandler) GetAnomalyRange(c echo.Context) error {
 	return c.JSON(http.StatusOK, detections)
 }
 
+func (h *AnomalyHandler) GetAnomalyStatus(c echo.Context) error {
+	status, err := h.mlClient.GetAnomalyStatus(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, status)
+}
+
+func (h *AnomalyHandler) TrainAnomalyModel(c echo.Context) error {
+	result, err := h.mlClient.TrainAnomalyModel(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
 func (h *AnomalyHandler) Register(g *echo.Group) {
 	g.GET("/anomaly", h.GetAnomaly)
 	g.GET("/anomaly/range", h.GetAnomalyRange)
+	g.GET("/anomaly/status", h.GetAnomalyStatus)
+	g.POST("/anomaly/train", h.TrainAnomalyModel)
 }

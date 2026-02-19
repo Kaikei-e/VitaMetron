@@ -2,7 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -23,7 +22,7 @@ func (h *HRVHandler) GetPrediction(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "date is required"})
 	}
 
-	date, err := time.Parse("2006-01-02", dateStr)
+	date, err := parseDate(dateStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid date format"})
 	}
