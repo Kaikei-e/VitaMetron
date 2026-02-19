@@ -24,11 +24,11 @@
 </script>
 
 <Card>
-	<h3 class="text-sm font-medium text-gray-500 mb-2">Sync Status</h3>
+	<h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">Sync Status</h3>
 
 	{#if toast}
 		<p
-			class="mb-2 rounded px-2 py-1 text-xs {toast.variant === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}"
+			class="mb-2 rounded px-2 py-1 text-xs {toast.variant === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-200' : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200'}"
 			role="alert"
 		>
 			{toast.message}
@@ -36,7 +36,7 @@
 	{/if}
 
 	{#if summary}
-		<p class="text-sm text-gray-600">
+		<p class="text-sm text-gray-600 dark:text-gray-300">
 			Last synced: <span class="font-medium">{formatDateTime(summary.SyncedAt)}</span>
 		</p>
 		<p class="mt-1 text-xs text-gray-400">Provider: {summary.Provider}</p>

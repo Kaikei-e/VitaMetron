@@ -60,7 +60,7 @@
 		{#if error}
 			<p class="mt-3 text-sm text-red-400">{error}</p>
 		{:else if currentAdvice}
-			<div class="advice-content mt-3 text-sm leading-relaxed text-gray-200">
+			<div class="advice-content mt-3 text-sm leading-relaxed text-gray-700 dark:text-gray-200">
 				{@html simpleMarkdownToHtml(currentAdvice.AdviceText)}
 			</div>
 			<div class="mt-2 flex items-center gap-3 text-xs text-gray-500">
@@ -69,7 +69,7 @@
 					<span>{(currentAdvice.GenerationMs / 1000).toFixed(1)}s</span>
 				{/if}
 				{#if currentAdvice.Cached}
-					<span class="px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">cached</span>
+					<span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400">cached</span>
 				{/if}
 			</div>
 		{:else}
@@ -84,9 +84,15 @@
 	.advice-content :global(h4) {
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--color-gray-300);
+		color: var(--color-gray-700);
 		margin-top: 0.75rem;
 		margin-bottom: 0.25rem;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.advice-content :global(h4) {
+			color: var(--color-gray-300);
+		}
 	}
 
 	.advice-content :global(h4:first-child) {
@@ -95,7 +101,13 @@
 
 	.advice-content :global(strong) {
 		font-weight: 600;
-		color: var(--color-gray-200);
+		color: var(--color-gray-800);
+	}
+
+	@media (prefers-color-scheme: dark) {
+		.advice-content :global(strong) {
+			color: var(--color-gray-200);
+		}
 	}
 
 	.advice-content :global(p) {

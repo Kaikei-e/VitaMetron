@@ -63,7 +63,7 @@
 		<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
 			Z-score: {prediction.PredictedZScore >= 0 ? '+' : ''}{prediction.PredictedZScore.toFixed(2)}
 		</p>
-		<div class="mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {confidencePct >= 70 ? 'bg-green-800/20 text-green-200' : confidencePct >= 50 ? 'bg-yellow-800/20 text-yellow-200' : 'bg-red-800/20 text-red-200'}">
+		<div class="mt-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {confidencePct >= 70 ? 'bg-green-100 text-green-800 dark:bg-green-800/20 dark:text-green-200' : confidencePct >= 50 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800/20 dark:text-yellow-200' : 'bg-red-100 text-red-800 dark:bg-red-800/20 dark:text-red-200'}">
 			Confidence: {confidencePct}%
 		</div>
 		{#if topDrivers.length > 0}

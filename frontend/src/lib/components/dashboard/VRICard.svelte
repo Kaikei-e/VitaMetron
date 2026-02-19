@@ -56,9 +56,9 @@
 				<p class="text-lg font-semibold" style:color>{label}</p>
 				<!-- Confidence badge -->
 				<span class="text-xs px-2 py-0.5 rounded-full font-medium
-					{vri.VRIConfidence >= 0.7 ? 'bg-green-800 text-green-200' :
-					 vri.VRIConfidence >= 0.4 ? 'bg-yellow-800 text-yellow-200' :
-					 'bg-red-800 text-red-200'}">
+					{vri.VRIConfidence >= 0.7 ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200' :
+					 vri.VRIConfidence >= 0.4 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200' :
+					 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200'}">
 					Confidence: {(vri.VRIConfidence * 100).toFixed(0)}%
 				</span>
 				{#if vri.MetricsIncluded?.length}
@@ -77,7 +77,7 @@
 					{@const pct = max > 0 ? (Math.abs(factor.contribution) / max) * 100 : 0}
 					<div class="flex items-center gap-2 text-xs">
 						<span class="w-16 text-gray-400 truncate flex-shrink-0">{humanizeVRIMetric(factor.metric)}</span>
-						<div class="flex-1 h-1.5 rounded-full bg-gray-700 overflow-hidden">
+						<div class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
 							<div
 								class="h-full rounded-full {factor.direction === 'positive' ? 'bg-green-500' : 'bg-red-500'}"
 								style:width="{pct}%"

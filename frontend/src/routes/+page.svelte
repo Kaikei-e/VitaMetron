@@ -103,7 +103,7 @@
 
 <!-- Data quality warning -->
 {#if data.dataQuality && !data.dataQuality.IsValidDay}
-	<div class="bg-yellow-900/40 border border-yellow-700 rounded-lg px-4 py-3 mb-4 text-sm text-yellow-200">
+	<div class="bg-yellow-50 border border-yellow-300 text-yellow-800 dark:bg-yellow-900/40 dark:border-yellow-700 dark:text-yellow-200 rounded-lg px-4 py-3 mb-4 text-sm">
 		<span class="font-semibold">Low data quality</span> — Today's data may be incomplete or unreliable.
 		{#if data.dataQuality.MetricsMissing?.length}
 			Missing: {data.dataQuality.MetricsMissing.join(', ')}.
@@ -112,7 +112,7 @@
 {/if}
 
 {#if data.dataQuality?.BaselineMaturity === 'cold'}
-	<div class="bg-blue-900/40 border border-blue-700 rounded-lg px-4 py-3 mb-4 text-sm text-blue-200">
+	<div class="bg-blue-50 border border-blue-300 text-blue-800 dark:bg-blue-900/40 dark:border-blue-700 dark:text-blue-200 rounded-lg px-4 py-3 mb-4 text-sm">
 		<span class="font-semibold">Building baseline</span> — Need {14 - (data.dataQuality.BaselineDays ?? 0)} more valid days for reliable insights.
 	</div>
 {/if}
@@ -134,9 +134,9 @@
 		{#if data.dataQuality}
 			<div class="flex items-center gap-2 mb-3">
 				<span class="text-xs px-2 py-0.5 rounded-full font-medium
-					{data.dataQuality.ConfidenceLevel === 'high' ? 'bg-green-800 text-green-200' :
-					 data.dataQuality.ConfidenceLevel === 'medium' ? 'bg-yellow-800 text-yellow-200' :
-					 'bg-red-800 text-red-200'}">
+					{data.dataQuality.ConfidenceLevel === 'high' ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-200' :
+					 data.dataQuality.ConfidenceLevel === 'medium' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-200' :
+					 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-200'}">
 					Confidence: {data.dataQuality.ConfidenceLevel}
 				</span>
 				<span class="text-xs text-gray-400">
