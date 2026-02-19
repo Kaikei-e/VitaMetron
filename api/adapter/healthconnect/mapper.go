@@ -122,16 +122,14 @@ func MapExerciseType(exerciseType int) string {
 
 var jst = time.FixedZone("JST", 9*3600)
 
-// EpochMillisToJSTInUTC converts epoch millis to JST time values
-// stored with a UTC location label — matching Fitbit's convention.
-func EpochMillisToJSTInUTC(ms int64) time.Time {
-	t := time.UnixMilli(ms).In(jst)
-	return time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), t.Second(), 0, time.UTC)
+// EpochMillisToJST converts epoch millis to a time.Time in the JST timezone.
+func EpochMillisToJST(ms int64) time.Time {
+	return time.UnixMilli(ms).In(jst)
 }
 
-// LocalDate returns the local date for epoch millis with zone offset in seconds.
+// LocalDate returns midnight of the local date for epoch millis with zone offset in seconds.
 func LocalDate(ms int64, zoneOffsetSec int) time.Time {
 	loc := time.FixedZone("", zoneOffsetSec)
 	t := time.UnixMilli(ms).In(loc)
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, loc)
 }

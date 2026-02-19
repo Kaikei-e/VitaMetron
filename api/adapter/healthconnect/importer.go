@@ -447,8 +447,8 @@ func (imp *Importer) queryDailySleep(db *sql.DB, dates map[string]*entity.DailyS
 		}
 
 		s := imp.ensureDate(dates, day)
-		startTime := EpochMillisToJSTInUTC(session.startMS)
-		endTime := EpochMillisToJSTInUTC(session.endMS)
+		startTime := EpochMillisToJST(session.startMS)
+		endTime := EpochMillisToJST(session.endMS)
 		s.SleepStart = &startTime
 		s.SleepEnd = &endTime
 		s.SleepDurationMin = int(session.durationMS / 60000)
@@ -536,12 +536,12 @@ func (imp *Importer) extractHR(db *sql.DB) ([]entity.HeartRateSample, error) {
 		if err := rows.Scan(&appID, &epochMS, &bpm); err != nil {
 			return nil, err
 		}
-		t := EpochMillisToJSTInUTC(epochMS)
+		t := EpochMillisToJST(epochMS)
 		key := minuteKey{t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute()}
 
 		existing, exists := minuteMap[key]
 		if !exists {
-			minuteMap[key] = sample{appID: appID, bpm: bpm, t: time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, time.UTC)}
+			minuteMap[key] = sample{appID: appID, bpm: bpm, t: time.Date(t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute(), 0, 0, jst)}
 		} else if appID == appFitbit && existing.appID != appFitbit {
 			minuteMap[key] = sample{appID: appID, bpm: bpm, t: existing.t}
 		}
@@ -627,7 +627,7 @@ func (imp *Importer) extractSleep(db *sql.DB) ([]entity.SleepStage, error) {
 				continue
 			}
 			stages = append(stages, entity.SleepStage{
-				Time:    EpochMillisToJSTInUTC(startMS),
+				Time:    EpochMillisToJST(startMS),
 				Stage:   stageName,
 				Seconds: int((endMS - startMS) / 1000),
 			})
@@ -666,7 +666,7 @@ func (imp *Importer) extractExercises(db *sql.DB) ([]entity.ExerciseLog, error) 
 		}
 
 		externalID := hex.EncodeToString(uuidBytes)
-		startTime := EpochMillisToJSTInUTC(startMS)
+		startTime := EpochMillisToJST(startMS)
 		durationMS := endMS - startMS
 
 		exercises = append(exercises, entity.ExerciseLog{
