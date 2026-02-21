@@ -185,19 +185,23 @@ async def predict_hrv(
     predictor = request.app.state.hrv_predictor
     ensemble = getattr(request.app.state, "hrv_ensemble", None)
 
-    # Check cache first
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(FETCH_PREDICTION_QUERY, date)
-
-    if row is not None:
-        return _row_to_response(row)
-
     # Check model readiness
     if not predictor.is_ready:
         return JSONResponse(
             status_code=503,
             content={"detail": "HRV model not trained. POST /hrv/train first."},
         )
+
+    # Today → always recompute (data may have changed since last sync)
+    if date >= datetime.date.today():
+        return await _predict_single(pool, predictor, date, ensemble=ensemble)
+
+    # Past dates → serve cache if available
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(FETCH_PREDICTION_QUERY, date)
+
+    if row is not None:
+        return _row_to_response(row)
 
     return await _predict_single(pool, predictor, date, ensemble=ensemble)
 

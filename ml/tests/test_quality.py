@@ -34,7 +34,7 @@ class TestQualityGatedScoring:
     def test_invalid_day_returns_neutral_score(self):
         features = _base_features(is_valid_day=False)
         score, confidence, factors = rule_based_score(features)
-        assert score == 3.0
+        assert score == 50.0
         assert confidence == 0.1
         assert factors == []
 
@@ -61,7 +61,7 @@ class TestQualityGatedScoring:
         if "confidence_score" in features:
             del features["confidence_score"]
         score, confidence, _ = rule_based_score(features)
-        assert 1.0 <= score <= 5.0
+        assert 0.0 <= score <= 100.0
         assert confidence == 0.4  # default rule-based confidence
 
 

@@ -198,13 +198,6 @@ async def detect_anomaly(
 ):
     pool = request.app.state.db_pool
 
-    # Check cache first
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(FETCH_ANOMALY_QUERY, date)
-
-    if row is not None:
-        return _row_to_response(row)
-
     # Check model readiness
     detector = request.app.state.anomaly_detector
     if not detector.is_ready:
@@ -212,6 +205,17 @@ async def detect_anomaly(
             status_code=503,
             content={"detail": "Anomaly model not trained. POST /anomaly/train first."},
         )
+
+    # Today → always recompute (data may have changed since last sync)
+    if date >= datetime.date.today():
+        return await _detect_single(pool, detector, date)
+
+    # Past dates → serve cache if available
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(FETCH_ANOMALY_QUERY, date)
+
+    if row is not None:
+        return _row_to_response(row)
 
     return await _detect_single(pool, detector, date)
 

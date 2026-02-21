@@ -35,6 +35,9 @@ def _make_single_day_row(**overrides):
         "calories_active": 350.0,
         "active_zone_min": 30.0,
         "skin_temp_variation": 0.5,
+        "hrv_deep_ln_rmssd": 4.0,
+        "hrv_deep_daily_ratio": 1.05,
+        "hrv_deep_delta": 0.2,
         "resting_hr_delta": -1.0,
         "hrv_delta": 0.1,
         "sleep_delta": 10.0,
@@ -172,7 +175,7 @@ async def test_extract_training_matrix_empty(mock_pool):
 
 
 def test_feature_names_count():
-    assert len(HRV_FEATURE_NAMES) == 26
+    assert len(HRV_FEATURE_NAMES) == 29
 
 
 def test_feature_names_unique():

@@ -112,6 +112,6 @@ async def test_extract_training_matrix_empty():
 
 
 def test_feature_names_count():
-    """Verify we have the expected ~20 features."""
-    assert len(ANOMALY_FEATURE_NAMES) == 19
-    assert len(set(ANOMALY_FEATURE_NAMES)) == 19  # no duplicates
+    """Verify we have the expected ~21 features."""
+    assert len(ANOMALY_FEATURE_NAMES) == 21
+    assert len(set(ANOMALY_FEATURE_NAMES)) == 21  # no duplicates

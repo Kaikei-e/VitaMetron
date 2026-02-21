@@ -207,7 +207,11 @@ async def get_vri(
 ):
     pool = request.app.state.db_pool
 
-    # Check cache first
+    # Today → always recompute (data may have changed since last sync)
+    if date >= datetime.date.today():
+        return await _compute_and_persist(pool, date)
+
+    # Past dates → serve cache if available
     async with pool.acquire() as conn:
         row = await conn.fetchrow(FETCH_VRI_QUERY, date)
 
