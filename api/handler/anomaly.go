@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -62,6 +63,16 @@ func (h *AnomalyHandler) GetAnomalyRange(c echo.Context) error {
 	to, err := parseDate(toStr)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid to date"})
+	}
+
+	// If today falls within the requested range, trigger fresh computation
+	// so that stale cached anomaly detection gets refreshed.
+	// Errors are ignored — ML down or missing data should not break the range query.
+	todayDate := time.Now().In(jst).Format("2006-01-02")
+	if todayDate >= from.Format("2006-01-02") && todayDate <= to.Format("2006-01-02") {
+		if todayTime, err := parseDate(todayDate); err == nil {
+			h.mlClient.DetectAnomaly(c.Request().Context(), todayTime)
+		}
 	}
 
 	detections, err := h.anomalyRepo.ListRange(c.Request().Context(), from, to)
