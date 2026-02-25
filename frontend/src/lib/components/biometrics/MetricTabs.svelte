@@ -14,11 +14,11 @@
 					{ label: 'Resting HR', value: summary.RestingHR, unit: 'bpm' },
 					{ label: 'Average HR', value: summary.AvgHR, unit: 'bpm' },
 					{ label: 'Max HR', value: summary.MaxHR, unit: 'bpm' },
-					{ label: 'HRV Daily', value: summary.HRVDailyRMSSD.toFixed(1), unit: 'ms' },
-					{ label: 'HRV Deep', value: summary.HRVDeepRMSSD.toFixed(1), unit: 'ms' },
-					{ label: 'SpO2 Avg', value: summary.SpO2Avg.toFixed(1), unit: '%' },
-					{ label: 'SpO2 Min', value: summary.SpO2Min.toFixed(1), unit: '%' },
-					{ label: 'SpO2 Max', value: summary.SpO2Max.toFixed(1), unit: '%' }
+					{ label: 'HRV Daily', value: summary.HRVDailyRMSSD?.toFixed(1) ?? '--', unit: 'ms' },
+					{ label: 'HRV Deep', value: summary.HRVDeepRMSSD?.toFixed(1) ?? '--', unit: 'ms' },
+					{ label: 'SpO2 Avg', value: summary.SpO2Avg?.toFixed(1) ?? '--', unit: '%' },
+					{ label: 'SpO2 Min', value: summary.SpO2Min?.toFixed(1) ?? '--', unit: '%' },
+					{ label: 'SpO2 Max', value: summary.SpO2Max?.toFixed(1) ?? '--', unit: '%' }
 				]
 			: []
 	);

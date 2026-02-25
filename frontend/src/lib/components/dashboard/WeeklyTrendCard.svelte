@@ -14,7 +14,7 @@
 	}: {
 		title: string;
 		summaries: DailySummary[];
-		extractor: (s: DailySummary) => number;
+		extractor: (s: DailySummary) => number | null;
 		color?: string;
 		unit?: string;
 		height?: string;
@@ -40,11 +40,12 @@
 		}
 	]);
 
-	let ariaLabel = $derived(
-		values.length > 0
-			? `${title} ${rangeLabel} trend: ${values.join(', ')}${unit ? ' ' + unit : ''}`
-			: `${title} ${rangeLabel} trend: no data`
-	);
+	let ariaLabel = $derived.by(() => {
+		const nonNull = values.filter((v): v is number => v != null);
+		return nonNull.length > 0
+			? `${title} ${rangeLabel} trend: ${nonNull.join(', ')}${unit ? ' ' + unit : ''}`
+			: `${title} ${rangeLabel} trend: no data`;
+	});
 </script>
 
 <Card>

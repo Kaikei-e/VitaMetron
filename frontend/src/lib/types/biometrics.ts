@@ -9,22 +9,22 @@ export interface DailySummary {
 	MaxHR: number;
 
 	// HRV
-	HRVDailyRMSSD: number;
-	HRVDeepRMSSD: number;
+	HRVDailyRMSSD: number | null;
+	HRVDeepRMSSD: number | null;
 
 	// SpO2
-	SpO2Avg: number;
-	SpO2Min: number;
-	SpO2Max: number;
+	SpO2Avg: number | null;
+	SpO2Min: number | null;
+	SpO2Max: number | null;
 
 	// Breathing rate
-	BRFullSleep: number;
-	BRDeepSleep: number;
-	BRLightSleep: number;
-	BRREMSleep: number;
+	BRFullSleep: number | null;
+	BRDeepSleep: number | null;
+	BRLightSleep: number | null;
+	BRREMSleep: number | null;
 
 	// Skin temperature
-	SkinTempVariation: number;
+	SkinTempVariation: number | null;
 
 	// Sleep
 	SleepStart: string | null;
@@ -54,7 +54,7 @@ export interface DailySummary {
 	MinutesVery: number;
 
 	// VO2 Max
-	VO2Max: number;
+	VO2Max: number | null;
 
 	// Heart rate zones
 	HRZoneOutMin: number;

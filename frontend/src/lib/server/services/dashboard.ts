@@ -64,7 +64,7 @@ export async function loadDashboard(): Promise<DashboardData> {
 		),
 		fetchJSON<DailySummary | null>(`/api/biometrics?date=${today}`, null),
 		fetchJSON<ConditionListResult>(
-			`/api/conditions?from=${sevenDaysAgo}&to=${today}&limit=7&sort=logged_at&order=asc`,
+			`/api/conditions?from=${sevenDaysAgo}&to=${today}&sort=logged_at&order=asc`,
 			{ items: [], total: 0 }
 		),
 		fetchJSON<DailySummary | null>(`/api/biometrics?date=${yesterday}`, null),

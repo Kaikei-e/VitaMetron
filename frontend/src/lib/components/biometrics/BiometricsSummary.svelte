@@ -19,7 +19,7 @@
 		</Card>
 		<Card>
 			<h3 class="text-sm font-medium text-gray-500">HRV</h3>
-			<p class="mt-1 text-2xl font-bold">{summary.HRVDailyRMSSD.toFixed(1)}<span class="ml-1 text-sm font-normal text-gray-400">ms</span></p>
+			<p class="mt-1 text-2xl font-bold">{summary.HRVDailyRMSSD?.toFixed(1) ?? '--'}<span class="ml-1 text-sm font-normal text-gray-400">ms</span></p>
 		</Card>
 		<Card>
 			<h3 class="text-sm font-medium text-gray-500">Sleep</h3>
