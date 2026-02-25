@@ -11,12 +11,9 @@ from fastapi.responses import JSONResponse
 from app.features.hrv_features import (
     extract_hrv_prediction_features,
     extract_hrv_sequence_features,
-    extract_hrv_training_matrix,
 )
 from app.features.quality import check_minimum_compliance
-from app.models.ensemble_hrv import HRVEnsemble, optimize_ensemble_weight
-from app.models.lstm_predictor import LSTMHRVPredictor
-from app.models.validation import walk_forward_cv_lstm
+from app.models.ensemble_hrv import HRVEnsemble
 from app.schemas.hrv_prediction import (
     HRVFeatureContribution,
     HRVModelStatusResponse,
@@ -24,6 +21,8 @@ from app.schemas.hrv_prediction import (
     HRVTrainRequest,
     HRVTrainResponse,
 )
+from app.training.errors import InsufficientDataError
+from app.training.hrv import train_hrv
 
 logger = logging.getLogger(__name__)
 
@@ -45,16 +44,6 @@ ON CONFLICT (date) DO UPDATE SET
     confidence=$5, top_drivers=$6, model_version=$7, computed_at=NOW()
 """
 
-UPSERT_MODEL_METADATA_QUERY = """
-INSERT INTO hrv_model_metadata (
-    model_version, training_days, cv_mae, cv_rmse, cv_r2,
-    cv_directional_accuracy, best_params, stable_features, feature_names, config
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-ON CONFLICT (model_version) DO UPDATE SET
-    training_days=$2, cv_mae=$3, cv_rmse=$4, cv_r2=$5,
-    cv_directional_accuracy=$6, best_params=$7, stable_features=$8,
-    feature_names=$9, config=$10, trained_at=NOW()
-"""
 
 
 def _row_to_response(row) -> HRVPredictionResponse:
@@ -217,138 +206,24 @@ async def train_hrv_model(
     if body is None:
         body = HRVTrainRequest()
 
-    # Default date range: all available data
-    end_date = body.end_date or datetime.date.today()
-    if body.start_date:
-        start_date = body.start_date
-    else:
-        async with pool.acquire() as conn:
-            earliest = await conn.fetchval("SELECT MIN(date) FROM daily_summaries")
-        start_date = earliest or (end_date - datetime.timedelta(days=365))
-
-    # Extract training matrix
-    X, y, feature_names, valid_dates = await extract_hrv_training_matrix(
-        pool, start_date, end_date
-    )
-
-    if X.shape[0] < 90:
+    try:
+        metadata, ensemble = await train_hrv(
+            pool,
+            predictor,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            optuna_trials=body.optuna_trials,
+            include_lstm=body.include_lstm,
+            lstm_lookback_days=body.lstm_lookback_days,
+        )
+    except InsufficientDataError as e:
         return JSONResponse(
             status_code=400,
-            content={
-                "detail": f"Insufficient training data: {X.shape[0]} valid days (need >= 90)."
-            },
+            content={"detail": f"Insufficient training data: {e.available} valid days (need >= {e.required})."},
         )
 
-    # 1. Train XGBoost (existing logic)
-    metadata = predictor.train(
-        X, y, feature_names, valid_dates, optuna_trials=body.optuna_trials
-    )
-    predictor.save()
-
-    xgb_mae = metadata["cv_mae"]
-    lstm_cv_mae = None
-    ensemble_alpha = None
-    ensemble_cv_mae = None
-
-    # 2. Optionally train LSTM
-    if body.include_lstm and X.shape[0] >= body.lstm_lookback_days + 30:
-        try:
-            logger.info("Training LSTM with lookback=%d...", body.lstm_lookback_days)
-
-            # LSTM walk-forward CV
-            lstm_cv = walk_forward_cv_lstm(
-                X, y, valid_dates, feature_names,
-                lookback=body.lstm_lookback_days,
-                min_train_days=90,
-                gap_days=1,
-                max_epochs=200,
-                patience=15,
-            )
-            lstm_cv_mae = lstm_cv.mae
-
-            # Check: LSTM MAE within 15% of XGBoost MAE?
-            if lstm_cv_mae <= 1.15 * xgb_mae:
-                logger.info(
-                    "LSTM included: MAE=%.4f (XGBoost=%.4f, threshold=%.4f)",
-                    lstm_cv_mae, xgb_mae, 1.15 * xgb_mae,
-                )
-
-                # Train final LSTM model
-                lstm_predictor = LSTMHRVPredictor(predictor._store)
-                lstm_predictor.train(
-                    X, y, feature_names, valid_dates,
-                    lookback_days=body.lstm_lookback_days,
-                )
-                lstm_predictor.save()
-
-                # Optimize ensemble weight using CV predictions
-                # Collect matched XGBoost and LSTM fold predictions
-                from app.models.validation import walk_forward_cv
-                xgb_cv = walk_forward_cv(
-                    X, y, valid_dates, feature_names,
-                    min_train_days=90, gap_days=1,
-                    params=metadata["best_params"],
-                    compute_shap=False,
-                )
-
-                # Match folds by test_date
-                xgb_fold_map = {f.test_date: f.y_pred for f in xgb_cv.fold_results}
-                lstm_fold_map = {f.test_date: f.y_pred for f in lstm_cv.fold_results}
-                common_dates = sorted(set(xgb_fold_map) & set(lstm_fold_map))
-
-                if len(common_dates) >= 5:
-                    xgb_preds = np.array([xgb_fold_map[d] for d in common_dates])
-                    lstm_preds = np.array([lstm_fold_map[d] for d in common_dates])
-                    y_common = np.array([
-                        next(f.y_true for f in xgb_cv.fold_results if f.test_date == d)
-                        for d in common_dates
-                    ])
-
-                    ensemble_alpha = optimize_ensemble_weight(xgb_preds, lstm_preds, y_common)
-
-                    # Compute ensemble CV MAE
-                    blended = ensemble_alpha * xgb_preds + (1 - ensemble_alpha) * lstm_preds
-                    ensemble_cv_mae = float(np.mean(np.abs(blended - y_common)))
-                else:
-                    ensemble_alpha = 0.5
-
-                # Create and save ensemble
-                ensemble = HRVEnsemble(predictor, lstm_predictor, alpha=ensemble_alpha)
-                ensemble.save_config(predictor._store)
-                request.app.state.hrv_ensemble = ensemble
-
-                logger.info(
-                    "Ensemble ready: alpha=%.2f, ensemble_MAE=%.4f",
-                    ensemble_alpha, ensemble_cv_mae or 0,
-                )
-            else:
-                logger.info(
-                    "LSTM excluded: MAE=%.4f > threshold=%.4f (XGBoost MAE=%.4f)",
-                    lstm_cv_mae, 1.15 * xgb_mae, xgb_mae,
-                )
-                # XGBoost-only ensemble
-                ensemble = HRVEnsemble(predictor, lstm_predictor=None)
-                ensemble.save_config(predictor._store)
-                request.app.state.hrv_ensemble = ensemble
-
-        except Exception:
-            logger.exception("LSTM training failed, using XGBoost only")
-
-    # Persist model metadata
-    async with pool.acquire() as conn:
-        await conn.execute(
-            UPSERT_MODEL_METADATA_QUERY,
-            metadata["model_version"],
-            metadata["training_days"],
-            metadata["cv_mae"],
-            metadata["cv_rmse"],
-            metadata["cv_r2"],
-            metadata["cv_directional_accuracy"],
-            json.dumps(metadata["best_params"]),
-            metadata["stable_features"],
-            metadata["feature_names"],
-            json.dumps({"optuna_trials": body.optuna_trials}),
-        )
+    if ensemble is not None:
+        request.app.state.hrv_ensemble = ensemble
 
     return HRVTrainResponse(
         model_version=metadata["model_version"],
@@ -360,9 +235,9 @@ async def train_hrv_model(
         best_params=metadata["best_params"],
         stable_features=metadata["stable_features"],
         message=f"Model trained on {metadata['training_days']} days.",
-        lstm_cv_mae=lstm_cv_mae,
-        ensemble_alpha=ensemble_alpha,
-        ensemble_cv_mae=ensemble_cv_mae,
+        lstm_cv_mae=metadata.get("lstm_cv_mae"),
+        ensemble_alpha=metadata.get("ensemble_alpha"),
+        ensemble_cv_mae=metadata.get("ensemble_cv_mae"),
     )
 
 

@@ -11,7 +11,6 @@ from fastapi.responses import JSONResponse
 from app.features.anomaly_features import (
     ANOMALY_FEATURE_NAMES,
     extract_anomaly_features,
-    extract_anomaly_training_matrix,
 )
 from app.features.anomaly_quality import apply_quality_gates, compute_anomaly_confidence
 from app.features.quality import get_day_quality
@@ -23,6 +22,8 @@ from app.schemas.anomaly import (
     AnomalyTrainRequest,
     AnomalyTrainResponse,
 )
+from app.training.anomaly import train_anomaly
+from app.training.errors import InsufficientDataError
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +56,6 @@ ON CONFLICT (date) DO UPDATE SET
     top_drivers=$8, explanation=$9, model_version=$10, computed_at=NOW()
 """
 
-UPSERT_MODEL_METADATA_QUERY = """
-INSERT INTO anomaly_model_metadata (
-    model_version, training_days, contamination, pot_threshold, feature_names, config
-) VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (model_version) DO UPDATE SET
-    training_days=$2, contamination=$3, pot_threshold=$4,
-    feature_names=$5, config=$6, trained_at=NOW()
-"""
 
 
 def _row_to_response(row) -> AnomalyDetectionResponse:
@@ -257,46 +250,19 @@ async def train_anomaly_model(
     if body is None:
         body = AnomalyTrainRequest()
 
-    # Default date range: all available data
-    end_date = body.end_date or datetime.date.today()
-    if body.start_date:
-        start_date = body.start_date
-    else:
-        async with pool.acquire() as conn:
-            earliest = await conn.fetchval("SELECT MIN(date) FROM daily_summaries")
-        start_date = earliest or (end_date - datetime.timedelta(days=180))
-
-    # Extract training matrix
-    X, feature_names, valid_dates = await extract_anomaly_training_matrix(
-        pool, start_date, end_date
-    )
-
-    if X.shape[0] < 30:
+    try:
+        metadata = await train_anomaly(
+            pool,
+            detector,
+            start_date=body.start_date,
+            end_date=body.end_date,
+            contamination=body.contamination,
+            n_estimators=body.n_estimators,
+        )
+    except InsufficientDataError as e:
         return JSONResponse(
             status_code=400,
-            content={
-                "detail": f"Insufficient training data: {X.shape[0]} valid days (need >= 30)."
-            },
-        )
-
-    # Train
-    metadata = detector.train(
-        X, feature_names, contamination=body.contamination, n_estimators=body.n_estimators
-    )
-
-    # Save model artifacts
-    detector.save()
-
-    # Persist model metadata
-    async with pool.acquire() as conn:
-        await conn.execute(
-            UPSERT_MODEL_METADATA_QUERY,
-            metadata["model_version"],
-            metadata["training_days"],
-            metadata["contamination"],
-            metadata["pot_threshold"],
-            metadata["feature_names"],
-            json.dumps({"n_estimators": metadata["n_estimators"]}),
+            content={"detail": f"Insufficient training data: {e.available} valid days (need >= {e.required})."},
         )
 
     return AnomalyTrainResponse(
