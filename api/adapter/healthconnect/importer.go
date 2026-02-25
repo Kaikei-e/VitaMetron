@@ -164,7 +164,7 @@ func (imp *Importer) extractSummaries(db *sql.DB) ([]entity.DailySummary, error)
 	if err := imp.queryDailyFloat(db, `
 		SELECT date(time/1000,'unixepoch','+9 hours') AS day, app_info_id, AVG(heart_rate_variability_millis)
 		FROM heart_rate_variability_rmssd_record_table WHERE app_info_id IN (3,5)
-		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.HRVDailyRMSSD = float32(v) },
+		GROUP BY day, app_info_id`, dates, func(s *entity.DailySummary, v float64) { f := float32(v); s.HRVDailyRMSSD = &f },
 		func(v float64) bool { return v >= float64(entity.RMSSDMin) && v <= float64(entity.RMSSDMax) },
 	); err != nil {
 		log.Printf("warn: HRV query: %v", err)
@@ -176,7 +176,7 @@ func (imp *Importer) extractSummaries(db *sql.DB) ([]entity.DailySummary, error)
 		FROM skin_temperature_delta_table d
 		JOIN skin_temperature_record_table s ON d.parent_key = s.row_id
 		WHERE s.app_info_id IN (3,5)
-		GROUP BY day, s.app_info_id`, dates, func(s *entity.DailySummary, v float64) { s.SkinTempVariation = float32(v) },
+		GROUP BY day, s.app_info_id`, dates, func(s *entity.DailySummary, v float64) { f := float32(v); s.SkinTempVariation = &f },
 		func(v float64) bool { return v >= float64(entity.SkinTempDeltaMin) && v <= float64(entity.SkinTempDeltaMax) },
 	); err != nil {
 		log.Printf("warn: skin temp query: %v", err)
@@ -387,9 +387,12 @@ func (imp *Importer) queryDailySpO2(db *sql.DB, dates map[string]*entity.DailySu
 		})
 		if ok {
 			s := imp.ensureDate(dates, day)
-			s.SpO2Avg = float32(v.avg)
-			s.SpO2Min = float32(v.min)
-			s.SpO2Max = float32(v.max)
+			avg := float32(v.avg)
+			min := float32(v.min)
+			max := float32(v.max)
+			s.SpO2Avg = &avg
+			s.SpO2Min = &min
+			s.SpO2Max = &max
 		}
 	}
 	return nil

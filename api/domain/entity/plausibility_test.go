@@ -2,13 +2,15 @@ package entity
 
 import "testing"
 
+func f32(v float32) *float32 { return &v }
+
 func TestCheckPlausibility_NormalValues(t *testing.T) {
 	s := &DailySummary{
 		RestingHR:         62,
-		HRVDailyRMSSD:    45.0,
-		SpO2Avg:          97.0,
-		SkinTempVariation: 0.5,
-		BRFullSleep:       15.0,
+		HRVDailyRMSSD:    f32(45.0),
+		SpO2Avg:          f32(97.0),
+		SkinTempVariation: f32(0.5),
+		BRFullSleep:       f32(15.0),
 	}
 	flags := CheckPlausibility(s)
 
@@ -54,7 +56,7 @@ func TestCheckPlausibility_OutOfRangeRMSSD(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &DailySummary{HRVDailyRMSSD: tt.rmssd}
+			s := &DailySummary{HRVDailyRMSSD: f32(tt.rmssd)}
 			flags := CheckPlausibility(s)
 			if flags["hrv_rmssd"] != tt.expect {
 				t.Errorf("hrv_rmssd = %s, want %s", flags["hrv_rmssd"], tt.expect)
@@ -87,7 +89,7 @@ func TestCheckPlausibility_SpO2Ranges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &DailySummary{SpO2Avg: tt.spo2}
+			s := &DailySummary{SpO2Avg: f32(tt.spo2)}
 			flags := CheckPlausibility(s)
 			if flags["spo2"] != tt.expect {
 				t.Errorf("spo2 = %s, want %s", flags["spo2"], tt.expect)
@@ -108,7 +110,7 @@ func TestCheckPlausibility_BRRanges(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := &DailySummary{BRFullSleep: tt.br}
+			s := &DailySummary{BRFullSleep: f32(tt.br)}
 			flags := CheckPlausibility(s)
 			if flags["br"] != tt.expect {
 				t.Errorf("br = %s, want %s", flags["br"], tt.expect)
@@ -120,12 +122,12 @@ func TestCheckPlausibility_BRRanges(t *testing.T) {
 func TestCheckMetricCompleteness_AllPresent(t *testing.T) {
 	s := &DailySummary{
 		RestingHR:         62,
-		HRVDailyRMSSD:    45.0,
-		SpO2Avg:          97.0,
+		HRVDailyRMSSD:    f32(45.0),
+		SpO2Avg:          f32(97.0),
 		SleepDurationMin:  420,
 		Steps:            8000,
-		BRFullSleep:       15.0,
-		SkinTempVariation: 0.5,
+		BRFullSleep:       f32(15.0),
+		SkinTempVariation: f32(0.5),
 	}
 	present, missing, pct := CheckMetricCompleteness(s)
 	if len(present) != 7 {
@@ -142,7 +144,7 @@ func TestCheckMetricCompleteness_AllPresent(t *testing.T) {
 func TestCheckMetricCompleteness_SomeMissing(t *testing.T) {
 	s := &DailySummary{
 		RestingHR:        62,
-		HRVDailyRMSSD:   45.0,
+		HRVDailyRMSSD:   f32(45.0),
 		SleepDurationMin: 420,
 		Steps:            8000,
 	}

@@ -12,22 +12,22 @@ type DailySummary struct {
 	MaxHR     int
 
 	// HRV
-	HRVDailyRMSSD float32
-	HRVDeepRMSSD  float32
+	HRVDailyRMSSD *float32
+	HRVDeepRMSSD  *float32
 
 	// SpO2
-	SpO2Avg float32
-	SpO2Min float32
-	SpO2Max float32
+	SpO2Avg *float32
+	SpO2Min *float32
+	SpO2Max *float32
 
 	// Breathing rate
-	BRFullSleep float32
-	BRDeepSleep float32
-	BRLightSleep float32
-	BRREMSleep  float32
+	BRFullSleep  *float32
+	BRDeepSleep  *float32
+	BRLightSleep *float32
+	BRREMSleep   *float32
 
 	// Skin temperature
-	SkinTempVariation float32
+	SkinTempVariation *float32
 
 	// Sleep
 	SleepStart        *time.Time
@@ -57,7 +57,7 @@ type DailySummary struct {
 	MinutesVery      int
 
 	// VO2 Max
-	VO2Max float32
+	VO2Max *float32
 
 	// Heart rate zones
 	HRZoneOutMin    int
@@ -66,4 +66,12 @@ type DailySummary struct {
 	HRZonePeakMin   int
 
 	SyncedAt time.Time
+}
+
+// Float32Ptr returns a pointer to v, or nil if v is zero (sentinel for missing data).
+func Float32Ptr(v float32) *float32 {
+	if v == 0 {
+		return nil
+	}
+	return &v
 }

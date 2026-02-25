@@ -102,7 +102,7 @@ type HRVResponse struct {
 		HRV struct {
 			DailyRMSSD float32 `json:"dailyRmssd"`
 			DeepRMSSD  float32 `json:"deepRmssd"`
-		} `json:"hrv"`
+		} `json:"value"`
 	} `json:"hrv"`
 }
 

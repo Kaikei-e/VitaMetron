@@ -47,13 +47,13 @@ func CheckPlausibility(s *DailySummary) map[string]string {
 	}
 
 	// HRV RMSSD
-	if s.HRVDailyRMSSD == 0 {
+	if s.HRVDailyRMSSD == nil {
 		flags["hrv_rmssd"] = "missing"
 	} else {
 		switch {
-		case s.HRVDailyRMSSD < RMSSDMin:
+		case *s.HRVDailyRMSSD < RMSSDMin:
 			flags["hrv_rmssd"] = "fail_low"
-		case s.HRVDailyRMSSD > RMSSDMax:
+		case *s.HRVDailyRMSSD > RMSSDMax:
 			flags["hrv_rmssd"] = "fail_high"
 		default:
 			flags["hrv_rmssd"] = "pass"
@@ -61,13 +61,13 @@ func CheckPlausibility(s *DailySummary) map[string]string {
 	}
 
 	// SpO2
-	if s.SpO2Avg == 0 {
+	if s.SpO2Avg == nil {
 		flags["spo2"] = "missing"
 	} else {
 		switch {
-		case s.SpO2Avg < SpO2Min:
+		case *s.SpO2Avg < SpO2Min:
 			flags["spo2"] = "fail_low"
-		case s.SpO2Avg > SpO2Max:
+		case *s.SpO2Avg > SpO2Max:
 			flags["spo2"] = "fail_high"
 		default:
 			flags["spo2"] = "pass"
@@ -75,13 +75,13 @@ func CheckPlausibility(s *DailySummary) map[string]string {
 	}
 
 	// Skin temperature variation
-	if s.SkinTempVariation == 0 {
+	if s.SkinTempVariation == nil {
 		flags["skin_temp"] = "missing"
 	} else {
 		switch {
-		case s.SkinTempVariation < SkinTempDeltaMin:
+		case *s.SkinTempVariation < SkinTempDeltaMin:
 			flags["skin_temp"] = "fail_low"
-		case s.SkinTempVariation > SkinTempDeltaMax:
+		case *s.SkinTempVariation > SkinTempDeltaMax:
 			flags["skin_temp"] = "fail_high"
 		default:
 			flags["skin_temp"] = "pass"
@@ -89,13 +89,13 @@ func CheckPlausibility(s *DailySummary) map[string]string {
 	}
 
 	// Breathing rate (full sleep)
-	if s.BRFullSleep == 0 {
+	if s.BRFullSleep == nil {
 		flags["br"] = "missing"
 	} else {
 		switch {
-		case s.BRFullSleep < BRMin:
+		case *s.BRFullSleep < BRMin:
 			flags["br"] = "fail_low"
-		case s.BRFullSleep > BRMax:
+		case *s.BRFullSleep > BRMax:
 			flags["br"] = "fail_high"
 		default:
 			flags["br"] = "pass"
@@ -110,12 +110,12 @@ func CheckPlausibility(s *DailySummary) map[string]string {
 func CheckMetricCompleteness(s *DailySummary) (present []string, missing []string, pct float32) {
 	checks := map[string]bool{
 		"hr":       s.RestingHR != 0,
-		"hrv":      s.HRVDailyRMSSD != 0,
-		"spo2":     s.SpO2Avg != 0,
+		"hrv":      s.HRVDailyRMSSD != nil,
+		"spo2":     s.SpO2Avg != nil,
 		"sleep":    s.SleepDurationMin != 0,
 		"activity": s.Steps != 0,
-		"br":       s.BRFullSleep != 0,
-		"temp":     s.SkinTempVariation != 0,
+		"br":       s.BRFullSleep != nil,
+		"temp":     s.SkinTempVariation != nil,
 	}
 
 	for _, m := range allMetrics {

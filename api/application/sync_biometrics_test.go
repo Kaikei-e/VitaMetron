@@ -73,11 +73,11 @@ func TestSyncBiometrics_AllSuccess(t *testing.T) {
 	summaryRepo := &mocks.MockDailySummaryRepository{
 		UpsertFunc: func(_ context.Context, s *entity.DailySummary) error {
 			upserted = true
-			if s.HRVDailyRMSSD != 45.0 {
-				t.Errorf("HRVDailyRMSSD = %f, want 45.0", s.HRVDailyRMSSD)
+			if s.HRVDailyRMSSD == nil || *s.HRVDailyRMSSD != 45.0 {
+				t.Errorf("HRVDailyRMSSD = %v, want 45.0", s.HRVDailyRMSSD)
 			}
-			if s.SpO2Avg != 97.5 {
-				t.Errorf("SpO2Avg = %f, want 97.5", s.SpO2Avg)
+			if s.SpO2Avg == nil || *s.SpO2Avg != 97.5 {
+				t.Errorf("SpO2Avg = %v, want 97.5", s.SpO2Avg)
 			}
 			if s.SleepDurationMin != 480 {
 				t.Errorf("SleepDurationMin = %d, want 480", s.SleepDurationMin)
@@ -190,14 +190,10 @@ func TestSyncBiometrics_ComputesDataQuality(t *testing.T) {
 	provider := &mocks.MockBiometricsProvider{
 		FetchDailySummaryFunc: func(_ context.Context, _ time.Time) (*entity.DailySummary, error) {
 			return &entity.DailySummary{
-				Date:              date,
-				RestingHR:         62,
-				HRVDailyRMSSD:    45.0,
-				SpO2Avg:          97.0,
-				SleepDurationMin:  420,
+				Date:             date,
+				RestingHR:        62,
+				SleepDurationMin: 420,
 				Steps:            8000,
-				BRFullSleep:       15.0,
-				SkinTempVariation: 0.5,
 			}, nil
 		},
 		FetchHRVFunc: func(_ context.Context, _ time.Time) (float32, float32, error) {

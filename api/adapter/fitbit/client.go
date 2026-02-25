@@ -149,7 +149,8 @@ func (c *FitbitClient) FetchDailySummary(ctx context.Context, date time.Time) (*
 		log.Printf("warn: fetch cardioscore failed for %s: %v", dateStr, err)
 	} else if len(cardioResp.CardioScore) > 0 {
 		if v := ParseVO2MaxRange(cardioResp.CardioScore[0].Value.VO2Max); v != nil {
-			summary.VO2Max = float32(*v)
+			f := float32(*v)
+			summary.VO2Max = &f
 		}
 	}
 

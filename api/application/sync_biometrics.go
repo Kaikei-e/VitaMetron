@@ -45,31 +45,31 @@ func (uc *SyncBiometricsUseCase) SyncDate(ctx context.Context, date time.Time) e
 
 	// Enrich with additional data, continue on individual fetch failures
 	if dailyRMSSD, deepRMSSD, err := uc.provider.FetchHRV(ctx, date); err == nil {
-		summary.HRVDailyRMSSD = dailyRMSSD
-		summary.HRVDeepRMSSD = deepRMSSD
+		summary.HRVDailyRMSSD = entity.Float32Ptr(dailyRMSSD)
+		summary.HRVDeepRMSSD = entity.Float32Ptr(deepRMSSD)
 	} else {
 		log.Printf("warn: FetchHRV failed for %s: %v", date.Format("2006-01-02"), err)
 	}
 
 	if avg, min, max, err := uc.provider.FetchSpO2(ctx, date); err == nil {
-		summary.SpO2Avg = avg
-		summary.SpO2Min = min
-		summary.SpO2Max = max
+		summary.SpO2Avg = entity.Float32Ptr(avg)
+		summary.SpO2Min = entity.Float32Ptr(min)
+		summary.SpO2Max = entity.Float32Ptr(max)
 	} else {
 		log.Printf("warn: FetchSpO2 failed for %s: %v", date.Format("2006-01-02"), err)
 	}
 
 	if full, deep, light, rem, err := uc.provider.FetchBreathingRate(ctx, date); err == nil {
-		summary.BRFullSleep = full
-		summary.BRDeepSleep = deep
-		summary.BRLightSleep = light
-		summary.BRREMSleep = rem
+		summary.BRFullSleep = entity.Float32Ptr(full)
+		summary.BRDeepSleep = entity.Float32Ptr(deep)
+		summary.BRLightSleep = entity.Float32Ptr(light)
+		summary.BRREMSleep = entity.Float32Ptr(rem)
 	} else {
 		log.Printf("warn: FetchBreathingRate failed for %s: %v", date.Format("2006-01-02"), err)
 	}
 
 	if temp, err := uc.provider.FetchSkinTemperature(ctx, date); err == nil {
-		summary.SkinTempVariation = temp
+		summary.SkinTempVariation = entity.Float32Ptr(temp)
 	} else {
 		log.Printf("warn: FetchSkinTemperature failed for %s: %v", date.Format("2006-01-02"), err)
 	}
