@@ -835,3 +835,102 @@ func (c *Client) DetectRisk(ctx context.Context, date time.Time) ([]string, erro
 
 	return risks, nil
 }
+
+// --- Retrain ---
+
+func (c *Client) CheckRetrain(ctx context.Context) (*entity.RetrainCheckResult, error) {
+	url := fmt.Sprintf("%s/retrain/check", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var result entity.RetrainCheckResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) TriggerRetrain(ctx context.Context, body io.Reader) (*entity.RetrainResult, error) {
+	url := fmt.Sprintf("%s/retrain/trigger", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.trainClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var result entity.RetrainResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) GetRetrainStatus(ctx context.Context) (*entity.RetrainResult, error) {
+	url := fmt.Sprintf("%s/retrain/status", c.baseURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var result entity.RetrainResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (c *Client) GetRetrainLogs(ctx context.Context, limit, offset int) (*entity.RetrainLogsResult, error) {
+	url := fmt.Sprintf("%s/retrain/logs?limit=%d&offset=%d", c.baseURL, limit, offset)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var result entity.RetrainLogsResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}

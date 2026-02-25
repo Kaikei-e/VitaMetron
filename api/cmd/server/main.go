@@ -96,6 +96,7 @@ func main() {
 	weeklyInsightsHandler := handler.NewWeeklyInsightsHandler(mlClient)
 	adviceHandler := handler.NewAdviceHandler(mlClient, adviceRepo)
 	healthkitHandler := handler.NewHealthKitHandler(rdb, cfg.Preprocessor.URL, cfg.Preprocessor.UploadDir)
+	retrainHandler := handler.NewRetrainHandler(mlClient)
 
 	// Scheduler
 	interval := cfg.Sync.IntervalMin
@@ -128,6 +129,7 @@ func main() {
 	weeklyInsightsHandler.Register(api)
 	adviceHandler.Register(api)
 	healthkitHandler.Register(api)
+	retrainHandler.Register(api)
 
 	// Graceful shutdown
 	go func() {
