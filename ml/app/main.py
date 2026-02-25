@@ -10,7 +10,8 @@ from app.models.divergence_detector import DivergenceDetector
 from app.models.ensemble_hrv import HRVEnsemble
 from app.models.hrv_predictor import HRVPredictor
 from app.models.lstm_predictor import LSTMHRVPredictor
-from app.routers import advice, anomaly, divergence, health, hrv_predict, insights, predict, risk, vri
+from app.routers import advice, anomaly, divergence, health, hrv_predict, insights, predict, retrain, risk, vri
+from app.scheduler import start_scheduler, stop_scheduler
 
 
 @asynccontextmanager
@@ -67,11 +68,16 @@ async def lifespan(app: FastAPI):
         logger.info("No divergence model found, POST /divergence/train to create one")
     app.state.divergence_detector = div_detector
 
+    # Start retrain scheduler
+    retrain_scheduler = start_scheduler(app, settings)
+    app.state.retrain_scheduler = retrain_scheduler
+
     logger.info("ML service ready")
 
     yield
 
     logger.info("Shutting down ML service...")
+    stop_scheduler(retrain_scheduler)
     await app.state.db_pool.close()
     logger.info("ML service stopped")
 
@@ -87,3 +93,4 @@ app.include_router(anomaly.router)
 app.include_router(hrv_predict.router)
 app.include_router(divergence.router)
 app.include_router(advice.router)
+app.include_router(retrain.router)

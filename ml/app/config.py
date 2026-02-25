@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     ollama_model: str = "gemma3:4b-it-qat"
     ollama_timeout: float = 120.0
 
+    # Retrain scheduler (containers run in JST)
+    retrain_enabled: bool = True
+    retrain_daily_hour: int = 3      # 03:00 JST
+    retrain_daily_minute: int = 0
+    retrain_weekly_day: str = "mon"  # Monday
+
     @model_validator(mode="after")
     def _load_secrets(self):
         if not self.db_password:
