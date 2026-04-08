@@ -324,6 +324,95 @@ def _build_subjective_section(ctx: dict) -> list[str]:
     return lines
 
 
+def _build_circadian_section(ctx: dict) -> list[str]:
+    """Build circadian rhythm section: CHS, cosinor, NPAR, sleep timing, nocturnal dip."""
+    circ = ctx.get("circadian")
+    if circ is None:
+        return []
+
+    lines: list[str] = []
+
+    chs = circ.get("chs_score")
+    if chs is not None:
+        conf = circ.get("chs_confidence", 0)
+        if conf > 0.3:
+            if chs >= 70:
+                level = "良好"
+            elif chs >= 50:
+                level = "普通"
+            else:
+                level = "乱れ気味"
+            lines.append(f"概日リズムスコア (CHS): {chs:.0f}/100（{level}）")
+
+    # Nocturnal HR dip
+    dip = circ.get("nocturnal_dip_pct")
+    if dip is not None:
+        day_hr = circ.get("daytime_mean_hr")
+        night_hr = circ.get("nighttime_mean_hr")
+        hr_info = ""
+        if day_hr and night_hr:
+            hr_info = f"、昼間平均{day_hr:.0f}bpm→夜間{night_hr:.0f}bpm"
+        if 10 <= dip <= 20:
+            lines.append(
+                f"夜間心拍低下: {dip:.1f}%（正常範囲10-20%内、健全な自律神経リズム{hr_info}）"
+            )
+        elif dip < 10:
+            lines.append(
+                f"夜間心拍低下: {dip:.1f}%（10%未満 — non-dipper傾向{hr_info}、"
+                "交感神経が夜間も優位な可能性）"
+            )
+        else:
+            lines.append(
+                f"夜間心拍低下: {dip:.1f}%（20%超 — extreme dipper傾向{hr_info}）"
+            )
+
+    # Sleep midpoint and regularity
+    midpoint = circ.get("sleep_midpoint_hour")
+    midpoint_var = circ.get("sleep_midpoint_var_min")
+    if midpoint is not None:
+        h = int(midpoint)
+        m = int((midpoint - h) * 60)
+        lines.append(f"睡眠中間点: {h:02d}:{m:02d}")
+
+    if midpoint_var is not None:
+        if midpoint_var <= 30:
+            lines.append(f"睡眠タイミングのばらつき: {midpoint_var:.0f}分（安定）")
+        elif midpoint_var <= 60:
+            lines.append(f"睡眠タイミングのばらつき: {midpoint_var:.0f}分（やや不規則）")
+        else:
+            lines.append(
+                f"睡眠タイミングのばらつき: {midpoint_var:.0f}分（不規則 — "
+                "就寝・起床時刻を一定にすることで概日リズムが安定しやすくなる）"
+            )
+
+    # Social jetlag
+    jetlag = circ.get("social_jetlag_min")
+    if jetlag is not None and jetlag > 30:
+        lines.append(
+            f"ソーシャルジェットラグ: {jetlag:.0f}分"
+            "（平日と休日の睡眠タイミングに差がある）"
+        )
+
+    # Interdaily stability
+    is_val = circ.get("is_value")
+    if is_val is not None:
+        if is_val >= 0.6:
+            lines.append(f"日間安定性 (IS): {is_val:.2f}（安定したリズム）")
+        elif is_val >= 0.4:
+            lines.append(f"日間安定性 (IS): {is_val:.2f}（普通）")
+        else:
+            lines.append(f"日間安定性 (IS): {is_val:.2f}（不安定 — 日々の生活リズムに差がある）")
+
+    # Acrophase (peak HR timing)
+    acro = circ.get("acrophase_hour")
+    if acro is not None:
+        h = int(acro)
+        m = int((acro - h) * 60)
+        lines.append(f"心拍ピーク時刻: {h:02d}:{m:02d}（コサイナー分析によるアクロフェーズ）")
+
+    return lines
+
+
 def _build_outlook_section(ctx: dict) -> list[str]:
     """Build outlook section: HRV prediction."""
     hrv_pred = ctx.get("hrv_prediction")
@@ -375,6 +464,7 @@ def build_user_prompt(ctx: dict) -> str:
         ("睡眠分析", _build_sleep_section(ctx)),
         ("活動量", _build_activity_section(ctx)),
         ("回復指数 (VRI)", _build_vri_section(ctx)),
+        ("概日リズム (サーカディアンリズム)", _build_circadian_section(ctx)),
         ("MLモデルの分析結果", _build_ml_insights_section(ctx)),
         ("主観的な体調", _build_subjective_section(ctx)),
         ("明日の見通し", _build_outlook_section(ctx)),

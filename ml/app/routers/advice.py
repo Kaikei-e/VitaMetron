@@ -108,6 +108,17 @@ FROM hrv_predictions WHERE date = $1::date
 ORDER BY computed_at DESC LIMIT 1
 """
 
+FETCH_CIRCADIAN_QUERY = """
+SELECT date, chs_score, chs_confidence,
+       cosinor_amplitude, cosinor_acrophase_hour,
+       npar_is, npar_iv, npar_ra,
+       npar_m10_start, npar_l5_start,
+       sleep_midpoint_hour, sleep_midpoint_var_min, social_jetlag_min,
+       nocturnal_dip_pct, daytime_mean_hr, nighttime_mean_hr,
+       sri_value
+FROM circadian_scores WHERE date = $1::date
+"""
+
 
 async def _collect_health_context(pool, date: datetime.date) -> dict | None:
     """Collect all health context for the given date."""
@@ -129,6 +140,7 @@ async def _collect_health_context(pool, date: datetime.date) -> dict | None:
         condition = await conn.fetchrow(FETCH_CONDITION_LOG_QUERY, date)
         divergence = await conn.fetchrow(FETCH_DIVERGENCE_QUERY, date)
         hrv_pred = await conn.fetchrow(FETCH_HRV_PREDICTION_QUERY, date)
+        circadian = await conn.fetchrow(FETCH_CIRCADIAN_QUERY, date)
 
     ctx: dict = {"date": str(date)}
 
@@ -247,6 +259,27 @@ async def _collect_health_context(pool, date: datetime.date) -> dict | None:
             "confidence": hrv_pred["confidence"],
         }
 
+    # Circadian rhythm
+    if circadian:
+        ctx["circadian"] = {
+            "chs_score": circadian["chs_score"],
+            "chs_confidence": circadian["chs_confidence"],
+            "cosinor_amplitude": circadian["cosinor_amplitude"],
+            "acrophase_hour": circadian["cosinor_acrophase_hour"],
+            "is_value": circadian["npar_is"],
+            "iv_value": circadian["npar_iv"],
+            "ra_value": circadian["npar_ra"],
+            "m10_start_hour": circadian["npar_m10_start"],
+            "l5_start_hour": circadian["npar_l5_start"],
+            "sleep_midpoint_hour": circadian["sleep_midpoint_hour"],
+            "sleep_midpoint_var_min": circadian["sleep_midpoint_var_min"],
+            "social_jetlag_min": circadian["social_jetlag_min"],
+            "nocturnal_dip_pct": circadian["nocturnal_dip_pct"],
+            "daytime_mean_hr": circadian["daytime_mean_hr"],
+            "nighttime_mean_hr": circadian["nighttime_mean_hr"],
+            "sri_value": circadian["sri_value"],
+        }
+
     return ctx
 
 
@@ -297,6 +330,11 @@ SYSTEM_PROMPT = """\
 - 睡眠効率: 85%以上=良好, 80%未満=課題あり
 - 入眠潜時: 30分以上=入眠困難の可能性
 - SpO2: 95〜100%が正常
+- 概日リズムスコア (CHS): 70以上=良好, 50〜70=普通, 50未満=リズム乱れ
+- 夜間心拍低下 (Nocturnal HR Dip): 10〜20%が正常、10%未満=non-dipper（交感神経優位）、20%超=extreme dipper
+- 睡眠タイミングのばらつき: 30分以下=安定、60分以上=概日リズムの乱れを示唆
+- ソーシャルジェットラグ: 平日と休日の睡眠中間点の差、60分以上は概日リズムへの負荷
+- 日間安定性 (IS): 0.6以上=安定したリズム、0.4未満=不安定
 
 ## 注意
 提供されていないデータについては言及しないでください。
