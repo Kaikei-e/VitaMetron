@@ -185,6 +185,183 @@ func vriResponseToEntity(vr vriResponse, fallbackDate time.Time) *entity.VRIScor
 	return s
 }
 
+// --- Circadian Health Score ---
+
+type circadianCosinorDetail struct {
+	Mesor         float64 `json:"mesor"`
+	Amplitude     float64 `json:"amplitude"`
+	AcrophaseHour float64 `json:"acrophase_hour"`
+}
+
+type circadianNPARDetail struct {
+	ISValue     float64 `json:"is_value"`
+	IVValue     float64 `json:"iv_value"`
+	RAValue     float64 `json:"ra_value"`
+	M10Value    float64 `json:"m10_value"`
+	M10StartHour float64 `json:"m10_start_hour"`
+	L5Value     float64 `json:"l5_value"`
+	L5StartHour float64 `json:"l5_start_hour"`
+}
+
+type circadianSleepTimingDetail struct {
+	MidpointHour          float64 `json:"midpoint_hour"`
+	MidpointVariabilityMin float64 `json:"midpoint_variability_min"`
+	SocialJetlagMin       float64 `json:"social_jetlag_min"`
+}
+
+type circadianNocturnalDipDetail struct {
+	DipPct          float64 `json:"dip_pct"`
+	DaytimeMeanHR   float64 `json:"daytime_mean_hr"`
+	NighttimeMeanHR float64 `json:"nighttime_mean_hr"`
+}
+
+type circadianResponse struct {
+	Date                string                       `json:"date"`
+	CHSScore            float64                      `json:"chs_score"`
+	CHSConfidence       float64                      `json:"chs_confidence"`
+	Cosinor             *circadianCosinorDetail      `json:"cosinor"`
+	NPAR                *circadianNPARDetail          `json:"npar"`
+	SleepTiming         *circadianSleepTimingDetail   `json:"sleep_timing"`
+	NocturnalDip        *circadianNocturnalDipDetail  `json:"nocturnal_dip"`
+	SRIValue            *float64                     `json:"sri_value"`
+	ZScores             map[string]*float64          `json:"z_scores"`
+	ContributingFactors json.RawMessage              `json:"contributing_factors"`
+	BaselineWindowDays  int                          `json:"baseline_window_days"`
+	BaselineMaturity    string                       `json:"baseline_maturity"`
+	MetricsIncluded     []string                     `json:"metrics_included"`
+}
+
+func circadianResponseToEntity(cr circadianResponse, fallbackDate time.Time) *entity.CircadianScore {
+	s := &entity.CircadianScore{
+		Date:                fallbackDate,
+		CHSScore:            float32(cr.CHSScore),
+		CHSConfidence:       float32(cr.CHSConfidence),
+		BaselineWindowDays:  cr.BaselineWindowDays,
+		BaselineMaturity:    cr.BaselineMaturity,
+		ContributingFactors: cr.ContributingFactors,
+		MetricsIncluded:     cr.MetricsIncluded,
+		ComputedAt:          time.Now(),
+	}
+
+	if cr.SRIValue != nil {
+		v := float32(*cr.SRIValue)
+		s.SRIValue = &v
+	}
+
+	if cr.Cosinor != nil {
+		v1 := float32(cr.Cosinor.Mesor)
+		v2 := float32(cr.Cosinor.Amplitude)
+		v3 := float32(cr.Cosinor.AcrophaseHour)
+		s.CosinorMesor = &v1
+		s.CosinorAmplitude = &v2
+		s.CosinorAcrophaseHour = &v3
+	}
+
+	if cr.NPAR != nil {
+		v1 := float32(cr.NPAR.ISValue)
+		v2 := float32(cr.NPAR.IVValue)
+		v3 := float32(cr.NPAR.RAValue)
+		v4 := float32(cr.NPAR.M10Value)
+		v5 := float32(cr.NPAR.M10StartHour)
+		v6 := float32(cr.NPAR.L5Value)
+		v7 := float32(cr.NPAR.L5StartHour)
+		s.NPARIS = &v1
+		s.NPARIV = &v2
+		s.NPARRA = &v3
+		s.NPARM10 = &v4
+		s.NPARM10Start = &v5
+		s.NPARL5 = &v6
+		s.NPARL5Start = &v7
+	}
+
+	if cr.SleepTiming != nil {
+		v1 := float32(cr.SleepTiming.MidpointHour)
+		v2 := float32(cr.SleepTiming.MidpointVariabilityMin)
+		v3 := float32(cr.SleepTiming.SocialJetlagMin)
+		s.SleepMidpointHour = &v1
+		s.SleepMidpointVarMin = &v2
+		s.SocialJetlagMin = &v3
+	}
+
+	if cr.NocturnalDip != nil {
+		v1 := float32(cr.NocturnalDip.DipPct)
+		v2 := float32(cr.NocturnalDip.DaytimeMeanHR)
+		v3 := float32(cr.NocturnalDip.NighttimeMeanHR)
+		s.NocturnalDipPct = &v1
+		s.DaytimeMeanHR = &v2
+		s.NighttimeMeanHR = &v3
+	}
+
+	setF32FromMap := func(m map[string]*float64, key string) *float32 {
+		if z, ok := m[key]; ok && z != nil {
+			v := float32(*z)
+			return &v
+		}
+		return nil
+	}
+	s.ZRhythmStrength = setF32FromMap(cr.ZScores, "z_rhythm_strength")
+	s.ZRhythmStability = setF32FromMap(cr.ZScores, "z_rhythm_stability")
+	s.ZRhythmFragmentation = setF32FromMap(cr.ZScores, "z_rhythm_fragmentation")
+	s.ZSleepRegularity = setF32FromMap(cr.ZScores, "z_sleep_regularity")
+	s.ZPhaseAlignment = setF32FromMap(cr.ZScores, "z_phase_alignment")
+
+	return s
+}
+
+func (c *Client) GetCircadian(ctx context.Context, date time.Time) (*entity.CircadianScore, error) {
+	url := fmt.Sprintf("%s/circadian?date=%s", c.baseURL, date.Format("2006-01-02"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var cr circadianResponse
+	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
+		return nil, err
+	}
+
+	return circadianResponseToEntity(cr, date), nil
+}
+
+func (c *Client) GetCircadianRange(ctx context.Context, from, to time.Time) ([]entity.CircadianScore, error) {
+	url := fmt.Sprintf("%s/circadian/range?start=%s&end=%s", c.baseURL, from.Format("2006-01-02"), to.Format("2006-01-02"))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ml service returned %d", resp.StatusCode)
+	}
+
+	var crs []circadianResponse
+	if err := json.NewDecoder(resp.Body).Decode(&crs); err != nil {
+		return nil, err
+	}
+
+	scores := make([]entity.CircadianScore, len(crs))
+	for i, cr := range crs {
+		scores[i] = *circadianResponseToEntity(cr, from)
+	}
+	return scores, nil
+}
+
 // --- Anomaly Detection ---
 
 type anomalyContribution struct {
