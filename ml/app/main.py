@@ -10,7 +10,7 @@ from app.models.divergence_detector import DivergenceDetector
 from app.models.ensemble_hrv import HRVEnsemble
 from app.models.hrv_predictor import HRVPredictor
 from app.models.lstm_predictor import LSTMHRVPredictor
-from app.routers import advice, anomaly, divergence, health, hrv_predict, insights, predict, retrain, risk, vri
+from app.routers import advice, anomaly, circadian, divergence, health, hrv_predict, insights, predict, retrain, risk, vri
 from app.scheduler import start_scheduler, stop_scheduler
 
 
@@ -94,3 +94,4 @@ app.include_router(hrv_predict.router)
 app.include_router(divergence.router)
 app.include_router(advice.router)
 app.include_router(retrain.router)
+app.include_router(circadian.router)
