@@ -47,6 +47,8 @@ services:
     environment:
       OLLAMA_HOST: "0.0.0.0"
       OLLAMA_KEEP_ALIVE: "-1"
+    ports:
+      - "${OLLAMA_BIND_ADDRESS:?Set OLLAMA_BIND_ADDRESS in .env}:11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     deploy:

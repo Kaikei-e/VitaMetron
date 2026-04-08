@@ -93,7 +93,7 @@ async def test_anomaly_low_quality():
         5,   # new_count
     ]
     conn._fetchrow_returns = [
-        {"valid_days": 1, "avg_completeness": 20.0},  # low quality
+        {"valid_days": 1, "avg_completeness": 0.20},  # low quality
     ]
     pool = MockPool(conn)
 
@@ -112,7 +112,7 @@ async def test_anomaly_trainable():
         3,   # new_count
     ]
     conn._fetchrow_returns = [
-        {"valid_days": 5, "avg_completeness": 80.0},
+        {"valid_days": 5, "avg_completeness": 0.80},
     ]
     pool = MockPool(conn)
 
@@ -129,7 +129,7 @@ async def test_anomaly_never_trained():
         None, # last_trained (never trained)
     ]
     conn._fetchrow_returns = [
-        {"valid_days": 6, "avg_completeness": 90.0},
+        {"valid_days": 6, "avg_completeness": 0.90},
     ]
     pool = MockPool(conn)
 
@@ -160,7 +160,7 @@ async def test_hrv_trainable():
         5,    # new_count
     ]
     conn._fetchrow_returns = [
-        {"valid_days": 5, "avg_completeness": 80.0},
+        {"valid_days": 5, "avg_completeness": 0.80},
     ]
     pool = MockPool(conn)
 
@@ -190,7 +190,7 @@ async def test_divergence_trainable():
         3,   # new_count
     ]
     conn._fetchrow_returns = [
-        {"valid_days": 5, "avg_completeness": 75.0},
+        {"valid_days": 5, "avg_completeness": 0.75},
     ]
     pool = MockPool(conn)
 

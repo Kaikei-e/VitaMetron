@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     model_store_path: str = "/app/model_store"
     log_level: str = "INFO"
     ollama_base_url: str = "http://ollama:11434"
-    ollama_model: str = "gemma3:4b-it-qat"
+    ollama_model: str = "gemma4-e4b-q4km"
     ollama_timeout: float = 120.0
+    ollama_num_predict: int = 2560
 
     # Retrain scheduler (containers run in JST)
     retrain_enabled: bool = True

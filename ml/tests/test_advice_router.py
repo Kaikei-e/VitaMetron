@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.config import Settings
+from app.routers.advice import _postprocess_advice
 
 
 @pytest.fixture
@@ -18,8 +19,9 @@ def test_app_with_settings(test_app):
         model_store_path="/tmp/model_store",
         log_level="DEBUG",
         ollama_base_url="http://ollama:11434",
-        ollama_model="gemma3:4b-it-qat",
+        ollama_model="gemma4-e4b-q4km",
         ollama_timeout=10.0,
+        ollama_num_predict=2560,
     )
     yield test_app
 
@@ -29,7 +31,7 @@ async def test_get_advice_cached(client, test_app_with_settings, mock_pool):
     cached_row = {
         "date": "2026-02-18",
         "advice_text": "おはようございます。本日のHRVは良好です。",
-        "model_name": "gemma3:4b-it-qat",
+        "model_name": "gemma4-e4b-q4km",
         "generation_ms": 5000,
         "generated_at": "2026-02-18T08:00:00Z",
     }
@@ -40,7 +42,7 @@ async def test_get_advice_cached(client, test_app_with_settings, mock_pool):
     data = resp.json()
     assert data["cached"] is True
     assert data["advice_text"] == "おはようございます。本日のHRVは良好です。"
-    assert data["model_name"] == "gemma3:4b-it-qat"
+    assert data["model_name"] == "gemma4-e4b-q4km"
     assert data["generation_ms"] == 5000
 
 
@@ -115,3 +117,33 @@ async def test_regenerate_missing_date(client, test_app_with_settings):
     """Missing date parameter should return 422."""
     resp = await client.post("/advice/regenerate")
     assert resp.status_code == 422
+
+
+# ── _postprocess_advice tests ──
+
+
+def test_postprocess_under_limit_unchanged():
+    """Text under 1500 chars should pass through without truncation."""
+    text = "おはようございます。" + "あ" * 800 + "良い一日を。"
+    result, warnings = _postprocess_advice(text)
+    assert "truncated" not in " ".join(warnings)
+    assert result == text
+
+
+def test_postprocess_truncates_at_sentence_boundary():
+    """Text over 1500 chars should be truncated at the last sentence boundary."""
+    # Build text: 600 chars + "。" + padding to exceed 1500
+    text = "おはようございます。" + "あ" * 590 + "。" + "い" * 950
+    assert len(text) > 1500
+    result, warnings = _postprocess_advice(text)
+    assert any("truncated" in w for w in warnings)
+    assert result.endswith("。")
+    assert len(result) <= 1500
+
+
+def test_postprocess_hard_truncate_no_sentence_boundary():
+    """When no sentence boundary after position 500, hard truncate at 1500."""
+    text = "あ" * 1600  # No "。" at all
+    result, warnings = _postprocess_advice(text)
+    assert any("truncated" in w for w in warnings)
+    assert len(result) == 1500

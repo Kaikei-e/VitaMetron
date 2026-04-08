@@ -72,12 +72,12 @@ async def check_anomaly_trainability(pool) -> TrainabilityResult:
         valid_days = quality["valid_days"]
         avg_completeness = quality["avg_completeness"]
 
-        if valid_days < 3 or avg_completeness < 40:
+        if valid_days < 3 or avg_completeness < 0.40:
             return TrainabilityResult(
                 trainable=False,
                 reason=(
                     f"Low recent quality: {valid_days} valid days, "
-                    f"{avg_completeness:.0f}% avg completeness"
+                    f"{avg_completeness:.0%} avg completeness"
                 ),
                 available_count=total_valid,
                 new_since_last_train=new_count,
@@ -108,7 +108,7 @@ async def check_hrv_trainability(pool) -> TrainabilityResult:
             SELECT COUNT(*) FROM daily_summaries ds
             JOIN daily_data_quality dq ON ds.date = dq.date
             WHERE dq.is_valid_day IS NOT FALSE
-              AND ds.ln_rmssd_mean IS NOT NULL
+              AND ds.hrv_daily_rmssd IS NOT NULL
         """)
         if total_valid < 90:
             return TrainabilityResult(
@@ -128,7 +128,7 @@ async def check_hrv_trainability(pool) -> TrainabilityResult:
                 JOIN daily_data_quality dq ON ds.date = dq.date
                 WHERE ds.date > $1::date
                   AND dq.is_valid_day IS NOT FALSE
-                  AND ds.ln_rmssd_mean IS NOT NULL
+                  AND ds.hrv_daily_rmssd IS NOT NULL
             """, last_trained)
         else:
             new_count = total_valid
@@ -152,12 +152,12 @@ async def check_hrv_trainability(pool) -> TrainabilityResult:
         valid_days = quality["valid_days"]
         avg_completeness = quality["avg_completeness"]
 
-        if valid_days < 3 or avg_completeness < 40:
+        if valid_days < 3 or avg_completeness < 0.40:
             return TrainabilityResult(
                 trainable=False,
                 reason=(
                     f"Low recent quality: {valid_days} valid days, "
-                    f"{avg_completeness:.0f}% avg completeness"
+                    f"{avg_completeness:.0%} avg completeness"
                 ),
                 available_count=total_valid,
                 new_since_last_train=new_count,
@@ -229,12 +229,12 @@ async def check_divergence_trainability(pool) -> TrainabilityResult:
         valid_days = quality["valid_days"]
         avg_completeness = quality["avg_completeness"]
 
-        if valid_days < 3 or avg_completeness < 40:
+        if valid_days < 3 or avg_completeness < 0.40:
             return TrainabilityResult(
                 trainable=False,
                 reason=(
                     f"Low recent quality: {valid_days} valid days, "
-                    f"{avg_completeness:.0f}% avg completeness"
+                    f"{avg_completeness:.0%} avg completeness"
                 ),
                 available_count=total_pairs,
                 new_since_last_train=new_count,

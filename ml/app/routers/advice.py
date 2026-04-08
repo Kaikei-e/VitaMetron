@@ -353,11 +353,11 @@ def _postprocess_advice(text: str) -> tuple[str, list[str]]:
 
     # Length check
     length = len(text)
-    if length > 1200:
+    if length > 1500:
         # Truncate at last sentence boundary within limit
-        truncated = text[:1200]
+        truncated = text[:1500]
         last_period = truncated.rfind("。")
-        if last_period > 400:
+        if last_period > 500:
             text = truncated[: last_period + 1]
         else:
             text = truncated
@@ -386,6 +386,7 @@ async def _call_ollama(
     system_prompt: str,
     user_prompt: str,
     timeout: float,
+    num_predict: int = 2560,
 ) -> tuple[str, int]:
     """Call Ollama /api/chat and return (response_text, generation_ms)."""
     payload = {
@@ -398,7 +399,7 @@ async def _call_ollama(
         "options": {
             "temperature": 0.7,
             "top_p": 0.9,
-            "num_predict": 1024,
+            "num_predict": num_predict,
         },
     }
 
@@ -435,6 +436,7 @@ async def _generate_advice(
         system_prompt,
         user_prompt,
         settings.ollama_timeout,
+        settings.ollama_num_predict,
     )
 
     advice_text, pp_warnings = _postprocess_advice(advice_text)
