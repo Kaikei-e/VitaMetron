@@ -9,6 +9,10 @@
 	import SleepStageTimeline from '$lib/components/dashboard/SleepStageTimeline.svelte';
 	import VRICard from '$lib/components/dashboard/VRICard.svelte';
 	import VRITrendChart from '$lib/components/dashboard/VRITrendChart.svelte';
+	import CircadianCard from '$lib/components/dashboard/CircadianCard.svelte';
+	import CircadianRhythmChart from '$lib/components/dashboard/CircadianRhythmChart.svelte';
+	import SleepMidpointChart from '$lib/components/dashboard/SleepMidpointChart.svelte';
+	import CircadianTrendChart from '$lib/components/dashboard/CircadianTrendChart.svelte';
 	import DailyAdviceCard from '$lib/components/dashboard/DailyAdviceCard.svelte';
 	import { formatDateTime } from '$lib/utils/date';
 	import type { MetricComparison } from '$lib/types/biometrics';
@@ -132,6 +136,9 @@
 <!-- Header: always visible -->
 <div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4 mb-6">
 	<VRICard vri={data.todayVRI} />
+	<CircadianCard circadian={data.todayCircadian} />
+</div>
+<div class="mb-6">
 	<ConditionCard condition={data.latestCondition} effectiveDate={data.effectiveDate} />
 </div>
 
@@ -162,6 +169,7 @@
 			/>
 			<MetricTile label="Steps" value={data.todaySummary?.Steps ?? '--'} unit="" />
 			<MetricTile label="SRI" value={data.todayVRI?.SRIValue != null ? Math.round(data.todayVRI.SRIValue) : '--'} unit="/100" />
+			<MetricTile label="CHS" value={data.todayCircadian ? Math.round(data.todayCircadian.CHSScore) : '--'} unit="/100" />
 		</div>
 		<div class="mt-4">
 			<TrendChart conditions={data.recentConditions} />
@@ -174,6 +182,13 @@
 		<div class="grid grid-cols-1 gap-3 lg:gap-4">
 			<IntradayHRChart todaySamples={data.todayHR} yesterdaySamples={data.yesterdayHR} />
 			<SleepStageTimeline todayStages={data.todaySleep} yesterdayStages={data.yesterdaySleep} />
+		</div>
+
+		<!-- Circadian rhythm section -->
+		<p class="text-xs text-gray-400 mt-4 mb-2">Circadian Rhythm</p>
+		<div class="grid grid-cols-1 gap-3 lg:grid-cols-2 lg:gap-4">
+			<CircadianRhythmChart circadian={data.todayCircadian} hrSamples={data.todayHR} />
+			<SleepMidpointChart scores={data.weekCircadian} />
 		</div>
 
 		<!-- Snapshot comparison section -->
@@ -218,6 +233,9 @@
 		<div class="mt-4">
 			<VRITrendChart scores={data.weekVRI} />
 		</div>
+		<div class="mt-4">
+			<CircadianTrendChart scores={data.weekCircadian} />
+		</div>
 	{/snippet}
 
 	{#snippet panel3()}
@@ -256,6 +274,9 @@
 		</div>
 		<div class="mt-4">
 			<VRITrendChart scores={data.monthVRI} rangeLabel="30-day" />
+		</div>
+		<div class="mt-4">
+			<CircadianTrendChart scores={data.monthCircadian} rangeLabel="30-day" />
 		</div>
 		<div class="mt-4">
 			<TrendChart conditions={data.monthConditions} rangeLabel="30-day" />

@@ -43,6 +43,19 @@ export function humanizeVRIMetric(metric: string): string {
 	return vriMetricNames[metric] ?? metric;
 }
 
+/** CHS contributing_factors metric names → Japanese labels */
+const chsMetricNames: Record<string, string> = {
+	rhythm_strength: 'リズム強度',
+	rhythm_stability: 'リズム安定性',
+	rhythm_fragmentation: 'リズム断片化',
+	sleep_regularity: '睡眠規則性',
+	phase_alignment: '位相整合性'
+};
+
+export function humanizeCHSMetric(metric: string): string {
+	return chsMetricNames[metric] ?? metric;
+}
+
 export function humanizeFeature(feature: string): string {
 	return featureNames[feature] ?? feature.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

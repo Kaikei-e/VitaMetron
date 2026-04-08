@@ -6,7 +6,8 @@ import type {
 	HeartRateSample,
 	SleepStageEntry,
 	DataQuality,
-	VRIScore
+	VRIScore,
+	CircadianScore
 } from '$lib/types/biometrics';
 import type { DailyAdvice } from '$lib/types/advice';
 
@@ -26,6 +27,9 @@ export interface DashboardData {
 	monthSummaries: DailySummary[];
 	monthVRI: VRIScore[];
 	monthConditions: ConditionLog[];
+	todayCircadian: CircadianScore | null;
+	weekCircadian: CircadianScore[];
+	monthCircadian: CircadianScore[];
 	todayAdvice: Promise<DailyAdvice | null>;
 	isOvernightMode: boolean;
 	effectiveDate: string;
@@ -56,7 +60,10 @@ export async function loadDashboard(): Promise<DashboardData> {
 		weekVRI,
 		monthSummaries,
 		monthVRI,
-		monthCondRes
+		monthCondRes,
+		todayCircadian,
+		weekCircadian,
+		monthCircadian
 	] = await Promise.all([
 		fetchJSON<ConditionListResult>(
 			`/api/conditions?limit=1&sort=logged_at&order=desc`,
@@ -81,7 +88,10 @@ export async function loadDashboard(): Promise<DashboardData> {
 		fetchJSON<ConditionListResult>(
 			`/api/conditions?from=${thirtyDaysAgo}&to=${today}&limit=30&sort=logged_at&order=asc`,
 			{ items: [], total: 0 }
-		)
+		),
+		fetchJSON<CircadianScore | null>(`/api/circadian?date=${today}`, null),
+		fetchJSON<CircadianScore[]>(`/api/circadian/range?from=${sevenDaysAgo}&to=${today}`, []),
+		fetchJSON<CircadianScore[]>(`/api/circadian/range?from=${thirtyDaysAgo}&to=${today}`, [])
 	]);
 
 	return {
@@ -100,6 +110,9 @@ export async function loadDashboard(): Promise<DashboardData> {
 		monthSummaries,
 		monthVRI,
 		monthConditions: monthCondRes.items ?? [],
+		todayCircadian,
+		weekCircadian,
+		monthCircadian,
 		todayAdvice,
 		isOvernightMode: overnight,
 		effectiveDate: today
