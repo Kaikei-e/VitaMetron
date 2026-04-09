@@ -1,11 +1,14 @@
 package handler
 
 import (
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
 	"vitametron/api/adapter/mlclient"
+	"vitametron/api/domain/entity"
 	"vitametron/api/domain/port"
 )
 
@@ -41,7 +44,13 @@ func (h *AdviceHandler) GetAdvice(c echo.Context) error {
 	// Fall back to ML client (will generate via LLM)
 	advice, err = h.mlClient.GetAdvice(c.Request().Context(), date)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		log.Printf("advice: ML client error for %s: %v", dateStr, err)
+		// Return a fallback response instead of 500 so the frontend doesn't error-loop
+		return c.JSON(http.StatusOK, &entity.DailyAdvice{
+			Date:        date,
+			AdviceText:  "アドバイスを生成できませんでした。しばらくしてから再生成をお試しください。",
+			GeneratedAt: time.Now(),
+		})
 	}
 
 	return c.JSON(http.StatusOK, advice)

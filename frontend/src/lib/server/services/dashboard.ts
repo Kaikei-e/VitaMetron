@@ -42,8 +42,8 @@ export async function loadDashboard(): Promise<DashboardData> {
 	const sevenDaysAgo = effectiveDaysAgoISO(7);
 	const thirtyDaysAgo = effectiveDaysAgoISO(30);
 
-	// Start advice fetch early — don't await (LLM generation can be slow, 120s timeout)
-	const todayAdvice = fetchJSON<DailyAdvice | null>(`/api/advice?date=${today}`, null, 120_000);
+	// Start advice fetch early — don't await (LLM generation can be slow, 40s timeout)
+	const todayAdvice = fetchJSON<DailyAdvice | null>(`/api/advice?date=${today}`, null, 40_000);
 
 	const [
 		condRes,

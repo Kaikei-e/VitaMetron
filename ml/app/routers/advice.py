@@ -529,7 +529,7 @@ async def get_advice(
     try:
         return await _generate_advice(pool, settings, date)
     except httpx.HTTPError as e:
-        logger.error("Ollama API error: %s", e)
+        logger.error("Ollama API error: %r", e)
         return JSONResponse(
             status_code=503,
             content={"detail": "LLM service unavailable. Please try again later."},
@@ -547,7 +547,7 @@ async def regenerate_advice(
     try:
         return await _generate_advice(pool, settings, date)
     except httpx.HTTPError as e:
-        logger.error("Ollama API error: %s", e)
+        logger.error("Ollama API error: %r", e)
         return JSONResponse(
             status_code=503,
             content={"detail": "LLM service unavailable. Please try again later."},

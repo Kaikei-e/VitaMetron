@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "gemma4-e4b-q4km"
-    ollama_timeout: float = 120.0
+    ollama_timeout: float = 30.0
     ollama_num_predict: int = 2560
 
     # Retrain scheduler (containers run in JST)

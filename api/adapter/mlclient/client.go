@@ -941,8 +941,8 @@ func (c *Client) GetAdvice(ctx context.Context, date time.Time) (*entity.DailyAd
 		return nil, err
 	}
 
-	// LLM generation can take up to 120s
-	client := &http.Client{Timeout: 120 * time.Second}
+	// LLM generation timeout (ML side has 30s timeout for Ollama)
+	client := &http.Client{Timeout: 35 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -968,8 +968,8 @@ func (c *Client) RegenerateAdvice(ctx context.Context, date time.Time) (*entity.
 		return nil, err
 	}
 
-	// LLM generation can take up to 120s
-	client := &http.Client{Timeout: 120 * time.Second}
+	// LLM generation timeout (ML side has 30s timeout for Ollama)
+	client := &http.Client{Timeout: 35 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
